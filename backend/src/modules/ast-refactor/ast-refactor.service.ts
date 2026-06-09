@@ -122,6 +122,23 @@ export class AstRefactorService {
     };
   }
 
+  private async getWorkspaceFiles(workspaceId: string) {
+    const workspace = await this.workspaceRepository.findById(workspaceId);
+    if (!workspace) throw new Error("Workspace not found");
+    const files = await this.filesystemService.getAllFiles(workspace.localPath);
+
+    return {
+      workspace,
+      files: files.filter(
+        (file) =>
+          file.endsWith(".ts") ||
+          file.endsWith(".tsx") ||
+          file.endsWith(".js") ||
+          file.endsWith(".jsx"),
+      ),
+    };
+  }
+
   async previewMoveFunction(
     workspaceId: string,
     functionName: string,
@@ -180,4 +197,74 @@ export class AstRefactorService {
       targetFile,
     };
   }
+
+  async previewRenameFunction(
+    workspaceId: string,
+    oldName: string,
+    newName: string,
+  ) {
+    const { workspace, files } = await this.getWorkspaceFiles(workspaceId);
+
+    const affectedFiles = [];
+
+    for (const filePath of files) {
+      const before = await this.filesystemService.readFile(filePath);
+
+      const ast = parse(before, {
+        sourceType: "module",
+        plugins: ["typescript", "jsx"],
+      });
+
+      const traverseFn = (traverse as any).default || traverse;
+
+      traverseFn(ast, {
+        FunctionDeclaration(path: NodePath<t.FunctionDeclaration>) {
+          if (path.node.id?.name === oldName) {
+            path.node.id.name = newName;
+          }
+        },
+        Identifier(path: NodePath<t.Identifier>) {
+          if (path.node.name === oldName) {
+            path.node.name = newName;
+          }
+        },
+      });
+      const after = generate(ast).code;
+
+      if (before !== after) {
+        affectedFiles.push({
+          filePath: this.filesystemService.getRelativePath(
+            workspace.localPath,
+            filePath,
+          ),
+          before,
+          after,
+        });
+      }
+    }
+    
+    return { affectedFiles };
+  }
+
+  async renameFunction(workspaceId: string, oldName: string, newName: string) {
+    const preview = await this.previewRenameFunction(
+      workspaceId,
+      oldName,
+      newName,
+    );
+    const workspace = await this.workspaceRepository.findById(workspaceId);
+
+    if (!workspace) throw new Error("Workspace not found");
+
+    for (const file of preview.affectedFiles) {
+      const absolutePath = path.join(workspace.localPath, file.filePath);
+      await this.filesystemService.writeFile(absolutePath, file.after);
+    }
+    return {
+      renamed: oldName,
+      newName,
+      filesUpdated: preview.affectedFiles.length,
+    };
+  }
+
 }

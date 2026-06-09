@@ -9,4 +9,10 @@ export class ChangeSetController {
     const result = this.service.generateChangeSet(plan);
     res.status(200).json({ success: true, result });
   }
+
+  async buildFromPlan(req: Request, res: Response) {
+    const plan = req.body;
+    const result = this.service.buildFromPlan(plan);
+    res.status(200).json({ success: true, result });
+  }
 }

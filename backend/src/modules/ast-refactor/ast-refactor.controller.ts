@@ -23,4 +23,16 @@ export class AstRefactorController {
       .status(200)
       .json({ success: true, refactor: result, reindex: indexingResult });
   }
+
+  async renameFunction(req: Request, res: Response) {
+    const { workspaceId, oldName, newName } = req.body;
+
+    const result = await this.astrefactorService.renameFunction(
+      workspaceId,
+      oldName,
+      newName,
+    );
+
+    return res.status(200).json({ success: true, result });
+  }
 }

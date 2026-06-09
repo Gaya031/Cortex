@@ -1,4 +1,5 @@
 import { RefactorPlan } from "../refactor-plan/refactor-plan.types.js";
+import { ChangeSet } from "./changeset.types.js";
 
 export class ChangesetService {
   generateChangeSet(plan: RefactorPlan) {
@@ -29,5 +30,36 @@ export class ChangesetService {
       updateImports: Array.from(updateImports.values()),
       warnings: [],
     };
+  }
+
+  buildFromPlan(plan: any): ChangeSet {
+    const changeSet: ChangeSet = {
+      createFiles: [],
+      moveFunctions: [],
+      renameFunctions: [],
+      updateImports: [],
+      warnings: [],
+    };
+    for (const action of plan.actions ?? []) {
+      if (action.type === "MOVE_FUNCTION") {
+        changeSet.moveFunctions.push({
+          function: action.function,
+          from: action.from,
+          to: action.to,
+        });
+      }
+
+      if (action.type === "RENAME_FUNCTION") {
+        changeSet.renameFunctions.push({
+          oldName: action.oldName,
+          newName: action.newName,
+        });
+      }
+
+      if (action.warning) {
+        changeSet.warnings.push(action.warning);
+      }
+    }
+    return changeSet;
   }
 }

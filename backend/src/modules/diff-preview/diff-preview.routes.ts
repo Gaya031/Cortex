@@ -6,5 +6,7 @@ const controller = new DiffPreviewController();
 
 router.post("/move-function", controller.previewMoveFunction.bind(controller));
 
+router.post("/rename-function", controller.previewRenameFunction.bind(controller));
+
 export default router;
 

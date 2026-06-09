@@ -12,3 +12,15 @@ export interface astRefactorService{
     targetBefore: string;
     targetAfter: string;
 }
+
+
+export interface RenameFunctionPreview{
+    filePath: string;
+    before: string;
+    after: string;
+}
+
+export interface RenameFunctionResult{
+    affectedFiles: RenameFunctionPreview[];
+    
+}

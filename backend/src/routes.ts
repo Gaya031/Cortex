@@ -22,6 +22,7 @@ import changesetRoutes from "./modules/changeset/changeset.routes.js";
 import astRefactorRoutes from "./modules/ast-refactor/ast-refactor.routes.js";
 import changeSetExecutorRoutes from "./modules/changeset-executor/changeset-executor.routes.js";
 import diffPreviewRoutes from "./modules/diff-preview/diff-preview.routes.js";
+import snapshotRoutes from "./modules/snapshot/snapshot.routes.js";
 
 
 const router = Router();
@@ -48,7 +49,7 @@ router.use("/changeset", changesetRoutes);
 router.use("/ast-refactor", astRefactorRoutes);
 router.use("/changeset-executor", changeSetExecutorRoutes);
 router.use("/diff-preview", diffPreviewRoutes);
-
+router.use("/snapshot", snapshotRoutes);
 
 
 export default router;
