@@ -5,3 +5,10 @@ export interface MoveFunctionRequest{
     targetFile: string;
 }
 
+export interface astRefactorService{
+    sourceBefore: string;
+    sourceAfter: string;
+
+    targetBefore: string;
+    targetAfter: string;
+}
