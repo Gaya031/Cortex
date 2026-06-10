@@ -50,7 +50,6 @@ export class ExplainerService {
 
   async explainFileWithAI(workspaceId: string, filePath: string) {
     const fileSummary = await this.explainFile(workspaceId, filePath);
-    // console.log(fileSummary);
     const context = await this.contextService.buildProjectContext(workspaceId);
     const prompt = buildFileExplanationPrompt(fileSummary, context);
     const explanation = await this.aiService.generate(prompt);

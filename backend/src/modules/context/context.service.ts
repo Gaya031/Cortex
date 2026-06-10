@@ -25,14 +25,50 @@ export class ContextService {
     };
   }
 
+  // async buildQuestionContext(
+  //   workspaceId: string,
+  //   query: string,
+  // ): Promise<RepositoryContext> {
+  //   const chunks = (
+  //     await this.embeddingService.search(workspaceId, query, 10)
+  //   ).filter((chunk) => chunk.score > 0.45).slice(0, 5);
+  //   const context = chunks
+  //     .map((chunk) => `File: ${chunk.filePath} ${chunk.content}`)
+  //     .join("\n-------------------\n");
+  //   return { query, context, chunks };
+  // }
+
   async buildQuestionContext(
     workspaceId: string,
     query: string,
   ): Promise<RepositoryContext> {
-    const chunks = await this.embeddingService.search(workspaceId, query, 5);
-    const context = chunks
-      .map((chunk) => `File: ${chunk.filePath} ${chunk.content}`)
-      .join("\n-------------------\n");
-    return { query, context, chunks };
+    const [chunks, architecture] = await Promise.all([
+      this.embeddingService.search(workspaceId, query, 10),
+      this.architectureService.getArchitectureSummary(workspaceId),
+    ]);
+
+    const filteredChunks = chunks
+      .filter((chunk) => chunk.score > 0.45)
+      .slice(0, 5);
+
+    const context = `
+Architecture:
+${JSON.stringify(architecture)}
+
+Repository Chunks:
+${filteredChunks
+  .map(
+    (chunk) =>
+      `File: ${chunk.filePath}
+${chunk.content}`,
+  )
+  .join("\n-----------------\n")}
+`;
+
+    return {
+      query,
+      context,
+      chunks: filteredChunks,
+    };
   }
 }

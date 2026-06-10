@@ -19,7 +19,6 @@ export class FileController {
       : req.params.workspaceId;
 
     const files = await fileService.getWorkspaceFiles(workspaceId);
-    console.log(files);
     return res.status(200).json({
       success: true,
       data: files,

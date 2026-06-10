@@ -8,7 +8,6 @@ export class FileService {
   }
 
   async getWorkspaceFiles(workspaceId: string) {
-    console.log("getFiles: ",await  this.fileRepository.findByWorkspace(workspaceId));
     return this.fileRepository.findByWorkspace(workspaceId);
   }
 }

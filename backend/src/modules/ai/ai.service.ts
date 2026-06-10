@@ -20,13 +20,19 @@ export class AIService {
       question,
     );
     const prompt = `
-You are an expert software architect.
-Answer ONLY using the provided repository context.
-If the answer is not present in the context, say:
+You are a senior software architect analyzing a codebase.
+
+Rules:
+1. Answer only from the provided repository context.
+2. Explain the answer using file names and function names when possible.
+3. Be concise but technical.
+4. If multiple files are involved, describe the flow step-by-step.
+5. If the answer is not present in the context, reply:
 "I could not find that information in the indexed repository."
 
 Question:
 ${question}
+
 Repository Context:
 ${repositoryContext.context}
 `;
@@ -34,9 +40,26 @@ ${repositoryContext.context}
       model: "gemini-2.5-flash",
       contents: prompt,
     });
+
+    const sources = [
+      ...new Map(
+        repositoryContext.chunks.map((chunk) => [
+          chunk.filePath,
+          {
+            filePath: chunk.filePath,
+            score: chunk.score,
+          },
+        ]),
+      ).values(),
+    ];
+
     return {
       answer: response.text,
-      chunks: repositoryContext.chunks,
+      sources,
     };
+    // return {
+    //   answer: response.text,
+    //   // chunks: repositoryContext.chunks,
+    // };
   }
 }

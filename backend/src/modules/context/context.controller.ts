@@ -10,7 +10,7 @@ export class ContextController {
       ? req.params.workspaceId[0]
       : req.params.workspaceId;
     const result = await this.contextService.buildProjectContext(workspaceId);
-    console.log(result);
+    
 
     return res.json({ success: true, result });
   }

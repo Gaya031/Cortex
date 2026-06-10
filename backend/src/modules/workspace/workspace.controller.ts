@@ -1,4 +1,5 @@
 import { Request, Response } from "express";
+import { pickFolder } from "./folder-picker.service.js";
 import { WorkspaceService } from "./workspace.service.js";
 
 const workspaceService = new WorkspaceService();
@@ -23,5 +24,20 @@ export class WorkspaceController {
         .json({ success: false, message: "Workspace not found" });
     }
     return res.status(200).json({ success: true, data: workspace });
+  }
+
+  async browseFolder(_req: Request, res: Response) {
+    try {
+      const result = await pickFolder();
+
+      return res.status(200).json({ success: true, data: result });
+    } catch (error) {
+      const message =
+        error instanceof Error
+          ? error.message
+          : "Could not open the folder picker.";
+
+      return res.status(501).json({ success: false, message });
+    }
   }
 }

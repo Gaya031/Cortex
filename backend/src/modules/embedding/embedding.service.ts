@@ -24,7 +24,6 @@ export class EmbeddingService {
 
   async generateWorkspaceEmbeddings(workspaceId: string) {
     const chunks = await this.chunkRepository.findByWorkspace(workspaceId);
-
     await this.embeddingRepository.deleteWorkspaceEmbeddings(workspaceId);
 
     const embeddings = [];
