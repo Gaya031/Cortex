@@ -9,6 +9,7 @@ import { Chunk } from "../chunk/chunk.types.js";
 import { WorkspaceRepository } from "../workspace/workspace.repository.js";
 import { FilesystemService } from "../../shared/filesystem/filesystem.service.js";
 import { EmbeddingService } from "../embedding/embedding.service.js";
+import { generateHash } from "../../shared/utils/hash.js";
 
 export class IndexerService {
   private readonly fileRepository = new FileRepository();
@@ -36,7 +37,38 @@ export class IndexerService {
       [".ts", ".tsx", ".js", ".jsx"].some((ext) => file.endsWith(ext)),
     );
 
-    //
+    await this.fileRepository.deleteWorkspaceFiles(workspaceId);
+
+    const fileRecords = [];
+
+    for (const filePath of supportedFiles) {
+      const content = await this.fileSystemService.readFile(filePath);
+
+      fileRecords.push({
+        workspaceId,
+
+        path: this.fileSystemService.getRelativePath(
+          workspace.localPath,
+          filePath,
+        ),
+
+        extension: filePath.split(".").pop() ?? "",
+
+        language:
+          filePath.endsWith(".ts") || filePath.endsWith(".tsx")
+            ? "typescript"
+            : "javascript",
+
+        hash: generateHash(content),
+
+        size: Buffer.byteLength(content, "utf8"),
+
+        content,
+      });
+    }
+    if (fileRecords.length > 0) {
+      const inserted = await this.fileRepository.createMany(fileRecords);
+    }
 
     const result: IndexWorkspaceResult = {
       filesProcessed: 0,
@@ -50,7 +82,10 @@ export class IndexerService {
     for (const filePath of supportedFiles) {
       const content = await this.fileSystemService.readFile(filePath);
 
-      const relativePath = this.fileSystemService.getRelativePath(workspace.localPath, filePath);
+      const relativePath = this.fileSystemService.getRelativePath(
+        workspace.localPath,
+        filePath,
+      );
 
       const stats = await this.indexFile(
         workspaceId,
@@ -63,7 +98,7 @@ export class IndexerService {
       result.edgesCreated += stats.edgesCreated;
     }
     await this.embeddingService.generateWorkspaceEmbeddings(workspaceId);
-    
+
     return result;
   }
 
@@ -120,7 +155,6 @@ export class IndexerService {
         if (resolvedFile) {
           chunk.resolvedImports.push(resolvedFile);
         }
-        // console.log("Resolved:", importPath, "=>", resolvedFile);
       }
     }
     return chunks;
