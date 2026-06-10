@@ -15,4 +15,13 @@ export class RefactorPlanController {
 
     return res.status(200).json({ success: true, result });
   }
+
+  async generate(req: Request, res: Response) {
+    const { workspaceId, goal } = req.body;
+    const result = await this.refactorPlanService.generate(workspaceId, goal);
+    return res.json({
+      success: true,
+      result,
+    });
+  }
 }

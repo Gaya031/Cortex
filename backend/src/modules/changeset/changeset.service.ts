@@ -56,6 +56,14 @@ export class ChangesetService {
         });
       }
 
+      if (action.type === "MOVE_FUNCTION") {
+        changeSet.moveFunctions.push({
+          function: action.function,
+          from: action.from,
+          to: action.to,
+        });
+      }
+      
       if (action.warning) {
         changeSet.warnings.push(action.warning);
       }

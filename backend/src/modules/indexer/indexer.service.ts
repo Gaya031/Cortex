@@ -8,6 +8,7 @@ import { ResolverService } from "../resolver/resolver.service.js";
 import { Chunk } from "../chunk/chunk.types.js";
 import { WorkspaceRepository } from "../workspace/workspace.repository.js";
 import { FilesystemService } from "../../shared/filesystem/filesystem.service.js";
+import { EmbeddingService } from "../embedding/embedding.service.js";
 
 export class IndexerService {
   private readonly fileRepository = new FileRepository();
@@ -18,6 +19,7 @@ export class IndexerService {
   private readonly resolverService = new ResolverService();
   private readonly workspaceRepository = new WorkspaceRepository();
   private readonly fileSystemService = new FilesystemService();
+  private readonly embeddingService = new EmbeddingService();
 
   async indexWorkspace(workspaceId: string): Promise<IndexWorkspaceResult> {
     // const files = await this.fileRepository.findByWorkspace(workspaceId);
@@ -60,6 +62,8 @@ export class IndexerService {
       result.nodesCreated += stats.nodesCreated;
       result.edgesCreated += stats.edgesCreated;
     }
+    await this.embeddingService.generateWorkspaceEmbeddings(workspaceId);
+    
     return result;
   }
 

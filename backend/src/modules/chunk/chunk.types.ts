@@ -1,4 +1,5 @@
 import { FunctionParameter } from "@babel/types";
+import { EmbeddingStatus } from "../embedding/embedding.types.js";
 
 export enum ChunkType {
   FUNCTION = "FUNCTION",
@@ -7,13 +8,6 @@ export enum ChunkType {
   METHOD = "METHOD",
   INTERFACE = "INTERFACE",
   TYPE = "TYPE",
-}
-
-export enum EmbeddingStatus {
-  PENDING = "PENDING",
-  PROCESSING = "PROCESSING",
-  READY = "READY",
-  FAILED = "FAILED",
 }
 
 export interface Chunk {

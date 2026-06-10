@@ -1,6 +1,7 @@
 import { parse } from "@babel/parser";
 import traverseModule from "@babel/traverse";
-import { Chunk, ChunkType, EmbeddingStatus } from "./chunk.types.js";
+import { Chunk, ChunkType } from "./chunk.types.js";
+import {EmbeddingStatus} from "../embedding/embedding.types.js";
 import * as t from "@babel/types";
 
 const traverse = traverseModule.default;

@@ -9,6 +9,14 @@ const embeddingSchema = new Schema ({
         type: String,
         required: true,
     },
+    filePath: {
+        type: String,
+        required: true,
+    },
+    content: {
+        type: String, 
+        required: true,
+    },
     contentHash: {
         type: String,
         required: true
