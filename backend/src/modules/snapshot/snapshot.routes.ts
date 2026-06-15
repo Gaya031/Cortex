@@ -9,4 +9,6 @@ router.post("/create", controller.createSnapshot.bind(controller));
 
 router.post("/restore/:snapshotId", controller.restoreSnapshot.bind(controller));
 
+router.get("/workspace/:workspaceId", controller.listSnapshots.bind(controller));
+
 export default router;

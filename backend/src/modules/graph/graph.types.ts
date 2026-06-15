@@ -1,5 +1,7 @@
 export enum GraphNodeType{
     FILE = "FILE",
+    ENTRY_FILE = "ENTRY_FILE",
+    FOLDER = "FOLDER",
     FUNCTION = "FUNCTION",
     COMPONENT = "COMPONENT",
     CLASS = "CLASS",
@@ -11,7 +13,8 @@ export enum GraphRelationType{
     CONTAINS = "CONTAINS",
     IMPORTS = "IMPORTS",
     EXPORTS = "EXPORTS",
-    FILE_IMPORTS_FILE = "FILE_IMPORTS_FILE"
+    FILE_IMPORTS_FILE = "FILE_IMPORTS_FILE",
+    CALLS = "CALLS"
 }
 
 export interface GraphNode{

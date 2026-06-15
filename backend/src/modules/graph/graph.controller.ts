@@ -41,4 +41,16 @@ export class GraphController {
     const result = await this.graphService.getVisualizationGraph(workspaceId);
     return res.status(200).json({ result });
   }
+
+  async projectFlow(req: Request, res: Response) {
+    const rawWorkspaceId = req.params.workspaceId;
+    const workspaceId = Array.isArray(rawWorkspaceId)
+      ? rawWorkspaceId[0]
+      : rawWorkspaceId;
+    if (!workspaceId) {
+      return res.status(400).json({ error: "workspaceId is required" });
+    }
+    const result = await this.graphService.getProjectFlowGraph(workspaceId);
+    return res.status(200).json({ result });
+  }
 }

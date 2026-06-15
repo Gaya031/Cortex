@@ -3,6 +3,11 @@ import { WorkspaceStatus } from "./workspace.types.js";
 
 const workspaceSchema = new Schema(
   {
+    userId: {
+      type: Schema.Types.ObjectId,
+      ref: 'user',
+      required: false, // Make it optional temporarily for backward compatibility
+    },
     name: {
       type: String,
       required: true,

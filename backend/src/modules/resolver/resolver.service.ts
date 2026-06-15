@@ -35,8 +35,8 @@ export class ResolverService {
         `${basePath}.tsx`,
         `${basePath}.js`,
         `${basePath}.jsx`,
-        `${basePath}./index.ts`,
-        `${basePath}./index.tsx`,
+        `${basePath}/index.ts`,
+        `${basePath}/index.tsx`,
     ];
 
     for(const candidate of candidates){

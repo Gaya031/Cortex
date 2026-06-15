@@ -11,4 +11,8 @@ export class DecisionRepository {
       createdAt: -1,
     });
   }
+
+  async deleteByWorkspace(workspaceId: string) {
+    return DecisionModel.deleteMany({ workspaceId });
+  }
 }

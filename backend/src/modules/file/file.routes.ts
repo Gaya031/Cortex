@@ -16,4 +16,14 @@ router.get(
   fileController.getWorkspaceFiles
 );
 
+router.get(
+  "/content",
+  fileController.getFileContent.bind(fileController)
+);
+
+router.post(
+  "/save",
+  fileController.saveFileContent.bind(fileController)
+);
+
 export default router;

@@ -21,9 +21,18 @@ export class CallgraphService {
     }));
 
     const functionMap = new Map();
+    const COMMON_BUILT_INS = new Set([
+      "useState", "useEffect", "useContext", "useReducer", "useCallback", "useMemo", "useRef", "useLayoutEffect",
+      "setTimeout", "setInterval", "clearTimeout", "clearInterval",
+      "parseInt", "parseFloat", "isNaN", "isFinite", "decodeURI", "decodeURIComponent", "encodeURI", "encodeURIComponent",
+      "String", "Number", "Boolean", "Array", "Object", "Function", "Symbol", "BigInt", "Math", "Date", "RegExp", "Error",
+      "Promise", "Map", "Set", "WeakMap", "WeakSet", "JSON", "Console", "require", "import", "console", "map", "filter", "reduce", "forEach", "find", "some", "every", "push", "pop", "shift", "unshift", "slice", "splice", "concat", "join", "split", "replace", "match", "test", "exec", "log", "error", "warn", "info", "debug", "dir", "table", "clear", "time", "timeEnd", "then", "catch", "finally", "resolve", "reject", "all", "race", "toString", "hasOwnProperty", "valueOf", "isPrototypeOf", "propertyIsEnumerable", "bind", "call", "apply"
+    ]);
 
     for (const chunk of chunks) {
-      functionMap.set(chunk.name, `${chunk.filePath}:${chunk.name}`);
+      if (!COMMON_BUILT_INS.has(chunk.name)) {
+        functionMap.set(chunk.name, `${chunk.filePath}:${chunk.name}`);
+      }
     }
     const edges = [];
     for (const chunk of chunks) {
@@ -39,7 +48,7 @@ export class CallgraphService {
     return { nodes, edges };
   }
 
-  async getFunctionImpact(workspaceId: string, functionName: string) {
+  async getFunctionImpact(workspaceId: string, functionId: string) {
     const graph = await this.buildCallGraph(workspaceId);
     const reverseGraph = new Map<string, string[]>();
 
@@ -64,8 +73,11 @@ export class CallgraphService {
             dfs(caller);
         }
     }
+
+    dfs(functionId);
+
     return {
-        function: functionName,
+        function: functionId,
         impactScore: affected.size,
         affectedFunctions: Array.from(affected)
     };

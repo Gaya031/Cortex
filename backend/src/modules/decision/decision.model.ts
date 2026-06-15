@@ -2,6 +2,11 @@ import mongoose, { Schema, model } from "mongoose";
 
 const decisionSchema = new Schema(
   {
+    userId: {
+      type: mongoose.Schema.Types.ObjectId,
+      ref: 'user',
+      required: false,
+    },
     workspaceId: {
       type: mongoose.Schema.Types.ObjectId,
       required: true,

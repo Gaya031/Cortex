@@ -25,28 +25,32 @@ import diffPreviewRoutes from "./modules/diff-preview/diff-preview.routes.js";
 import snapshotRoutes from "./modules/snapshot/snapshot.routes.js";
 import embeddingRoutes from "./modules/embedding/embedding.routes.js";
 import aiRoutes from "./modules/ai/ai.routes.js";
+import repositoryRoutes from "./modules/repository/repository.routes.js";
+import authRoutes from "./modules/auth/auth.routes.js";
+import { verifyToken } from "./middlewares/auth.middleware.js";
 
 
 const router = Router();
 
-router.use("/workspaces", workspaceRoutes);
+router.use("/auth", authRoutes);
+router.use("/workspaces", verifyToken, workspaceRoutes);
 router.use("/parser", parserRoutes);
 router.use("/chunks", chunkRoutes);
 router.use("/graph", graphRoutes);
 router.use("/file", fileRoutes);
 router.use("/indexer", indexerRoutes);
-router.use("/resolver", resolverRoutes);
-router.use("/architecture", architectureRoutes);
-router.use("/explainer", explainerRoutes);
-router.use("/decision", decisionRoutes);
-router.use("/context", contextRoutes);
-router.use("/intent", intentRoutes);
-router.use("/intelligence", intelligenceRoutes);
-router.use("/planner", plannerRoutes);
-router.use("/refactor", refactorRoutes);
-router.use("/transformation", transformationRoutes);
-router.use("/callgraph", callgraphRoutes);
-router.use("/refactor-plan", refactorPlanRoutes);
+router.use("/resolver", verifyToken, resolverRoutes);
+router.use("/architecture", verifyToken, architectureRoutes);
+router.use("/explainer", verifyToken, explainerRoutes);
+router.use("/decision", verifyToken, decisionRoutes);
+router.use("/context", verifyToken, contextRoutes);
+router.use("/intent", verifyToken, intentRoutes);
+router.use("/intelligence", verifyToken, intelligenceRoutes);
+router.use("/planner", verifyToken, plannerRoutes);
+router.use("/refactor", verifyToken, refactorRoutes);
+router.use("/transformation", verifyToken, transformationRoutes);
+router.use("/callgraph", verifyToken, callgraphRoutes);
+router.use("/refactor-plan", verifyToken, refactorPlanRoutes);
 router.use("/changeset", changesetRoutes);
 router.use("/ast-refactor", astRefactorRoutes);
 router.use("/changeset-executor", changeSetExecutorRoutes);
@@ -54,6 +58,7 @@ router.use("/diff-preview", diffPreviewRoutes);
 router.use("/snapshot", snapshotRoutes);
 router.use("/embedding", embeddingRoutes);
 router.use("/ai", aiRoutes);
+router.use("/repository", repositoryRoutes);
 
 
 export default router;

@@ -82,4 +82,8 @@ export class SnapshotService {
       files: snapshotFiles,
     });
   }
+
+  async getSnapshotsByWorkspace(workspaceId: string) {
+    return this.snapshotRepository.findByWorkspace(workspaceId);
+  }
 }

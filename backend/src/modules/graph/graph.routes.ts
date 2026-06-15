@@ -12,4 +12,6 @@ router.get("/dependents", controller.dependents.bind(controller));
 
 router.get("/visual/:workspaceId", controller.visual.bind(controller));
 
+router.get("/project-flow/:workspaceId", controller.projectFlow.bind(controller));
+
 export default router;

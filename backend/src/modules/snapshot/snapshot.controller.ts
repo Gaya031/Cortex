@@ -17,4 +17,11 @@ export class SnapshotController {
     const result = await this.service.restoreSnapshot(snapshotId);
     return res.status(200).json({success: true, result});
   }
+
+  async listSnapshots(req: Request, res: Response) {
+    const rawWorkspaceId = req.params.workspaceId;
+    const workspaceId = Array.isArray(rawWorkspaceId) ? rawWorkspaceId[0] : rawWorkspaceId;
+    const result = await this.service.getSnapshotsByWorkspace(workspaceId);
+    return res.status(200).json({ success: true, result });
+  }
 }

@@ -14,7 +14,7 @@ export class FilesystemService {
       for (const entry of entries) {
         const fullPath = path.join(current, entry.name);
         if (entry.isDirectory()) {
-          if (["node_modules", ".git", "dist", "build"].includes(entry.name)) {
+          if ([".git", "node_modules", "dist", "build", ".next", ".gemini", "coverage", "out"].includes(entry.name)) {
             continue;
           }
           await scan(fullPath);

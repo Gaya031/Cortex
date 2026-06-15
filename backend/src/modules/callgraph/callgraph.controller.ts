@@ -12,10 +12,10 @@ export class CallGraphController {
     res.status(200).json({ success: true, result });
   }
   async getFunctionImpact(req: Request, res: Response) {
-    const { workspaceId, functionName } = req.body;
+    const { workspaceId, functionId } = req.body;
     const result = await this.callgraphService.getFunctionImpact(
       workspaceId,
-      functionName,
+      functionId,
     );
     res.status(200).json({ success: true, result });
   }
