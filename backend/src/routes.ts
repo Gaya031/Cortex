@@ -28,7 +28,8 @@ import aiRoutes from "./modules/ai/ai.routes.js";
 import repositoryRoutes from "./modules/repository/repository.routes.js";
 import authRoutes from "./modules/auth/auth.routes.js";
 import { verifyToken } from "./middlewares/auth.middleware.js";
-
+import flowExplainRoutes from "./modules/flow-explainer/flow-explainer.routes.js";
+import validationRoutes from "./modules/validation/validation.routes.js";
 
 const router = Router();
 
@@ -59,7 +60,8 @@ router.use("/snapshot", snapshotRoutes);
 router.use("/embedding", embeddingRoutes);
 router.use("/ai", aiRoutes);
 router.use("/repository", repositoryRoutes);
-
+router.use("/flow-explain", flowExplainRoutes);
+router.use("/validation", validationRoutes);
 
 export default router;
 

@@ -12,7 +12,7 @@ router.post(
 );
 
 router.get(
-  "/workspace/:workspaceId",
+  "/workspaces/:workspaceId",
   fileController.getWorkspaceFiles
 );
 

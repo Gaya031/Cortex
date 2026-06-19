@@ -1,8 +1,8 @@
 import { Request, Response, NextFunction } from "express";
 import jwt from "jsonwebtoken";
-import env from "../config/env.js";
+import {env} from "../config/env.js";
 
-const JWT_SECRET = process.env.JWT_SECRET || "super-secret-key-";
+const JWT_SECRET = process.env.JWT_SECRET || "super-secret-key-change-me-in-production";
 
 export const verifyToken = (req: Request, res: Response, next: NextFunction) => {
   const token = req.header("Authorization")?.replace("Bearer ", "");
@@ -15,7 +15,8 @@ export const verifyToken = (req: Request, res: Response, next: NextFunction) => 
     const decoded = jwt.verify(token, JWT_SECRET);
     (req as any).user = decoded;
     next();
-  } catch (error) {
+  } catch (error: unknown) {
+    console.log((error as Error).message);
     res.status(400).json({ success: false, message: "Invalid token." });
   }
 };

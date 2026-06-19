@@ -42,7 +42,7 @@ export class ResolverService {
     for(const candidate of candidates){
         const file = await this.fileRepository.findByPath(workspaceId, candidate);
         if(file) return candidate;
-        return null;
-    }
+      }
+      return null;
   }
 }

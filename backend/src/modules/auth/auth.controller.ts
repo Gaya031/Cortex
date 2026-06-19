@@ -2,7 +2,7 @@ import { Request, Response } from "express";
 import bcrypt from "bcryptjs";
 import jwt from "jsonwebtoken";
 import UserModel from "./user.model.js";
-import env from "../../config/env.js";
+import {env} from "../../config/env.js";
 
 // Hardcode a default JWT secret fallback just in case it's not set
 const JWT_SECRET = process.env.JWT_SECRET || "super-secret-key-change-me-in-production";
