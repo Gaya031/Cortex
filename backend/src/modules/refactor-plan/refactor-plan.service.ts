@@ -1,4 +1,5 @@
-import { buildRefactorPlanPrompt } from "../../shared/prompts/refactor-plan.prompt.js";
+import { buildRefactorPlanPrompt, buildRepositoryContextPrompt } from "../../shared/prompts/refactor-plan.prompt.js";
+import { parseAIJson } from "../../shared/utils/ai.utils.js";
 import { AIService } from "../ai/ai.service.js";
 import { ChangesetService } from "../changeset/changeset.service.js";
 import { ContextService } from "../context/context.service.js";
@@ -32,13 +33,13 @@ export class RefactorPlanService {
     );
 
     const response = await this.aiService.generate(prompt);
-
+    const cleaned = parseAIJson(response || "");
     if (!response) {
       throw new Error("AI service returned no response");
     }
 
     try {
-      return JSON.parse(response);
+      return JSON.parse(cleaned);
     } catch {
       return { raw: response };
     }
@@ -50,38 +51,14 @@ export class RefactorPlanService {
       goal,
     );
 
-    const prompt = `You are an expert software architect.
-Repository Context:
-${repositoryContext.context}
-User Goal:
-${goal}
-Supported actions:
-1. RENAME_FUNCTION
-{
-  "type": "RENAME_FUNCTION",
-  "oldName": "...",
-  "newName": "..."
-}
-2. MOVE_FUNCTION
-{
-  "type": "MOVE_FUNCTION",
-  "function": "...",
-  "from": "...",
-  "to": "..."
-}
-Return ONLY valid JSON.
-Example:
-{
-  "summary": "...",
-  "actions": [...]
-}`;
+    const prompt = buildRepositoryContextPrompt(repositoryContext, goal);
 
-    const raw = await this.aiService.generate(prompt);
+    const raw = (await this.aiService.generate(prompt));
     if (!raw) {
       throw new Error("AI service returned no response");
     }
 
-    const cleaned = raw.replace(/```json/g, "").replace(/```/g, "").trim();
+    const cleaned = parseAIJson(raw);
 
     const plan = JSON.parse(cleaned);
 

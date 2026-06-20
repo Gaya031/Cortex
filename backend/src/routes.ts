@@ -30,6 +30,7 @@ import authRoutes from "./modules/auth/auth.routes.js";
 import { verifyToken } from "./middlewares/auth.middleware.js";
 import flowExplainRoutes from "./modules/flow-explainer/flow-explainer.routes.js";
 import validationRoutes from "./modules/validation/validation.routes.js";
+import refactorReviewRoutes from "./modules/refactor-review/refactor-review.routes.js";
 
 const router = Router();
 
@@ -62,6 +63,7 @@ router.use("/ai", aiRoutes);
 router.use("/repository", repositoryRoutes);
 router.use("/flow-explain", flowExplainRoutes);
 router.use("/validation", validationRoutes);
+router.use("/refactor-review", refactorReviewRoutes);
 
 export default router;
 

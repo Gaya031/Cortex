@@ -1,7 +1,7 @@
 import { parse } from "@babel/parser";
 import traverseModule from "@babel/traverse";
 import { Chunk, ChunkType } from "./chunk.types.js";
-import {EmbeddingStatus} from "../embedding/embedding.types.js";
+import { EmbeddingStatus } from "../embedding/embedding.types.js";
 import * as t from "@babel/types";
 
 const traverse = traverseModule.default;
@@ -19,12 +19,31 @@ export class ChunkService {
       if (!current || typeof current !== "object") {
         return;
       }
-      if (
-        current.type === "CallExpression" &&
-        current.callee?.type === "Identifier"
-      ) {
-        calls.add(current.callee.name);
+      if (current.type === "CallExpression") {
+        const callee = current.callee;
+
+        // getUsers()
+        if (callee?.type === "Identifier") {
+          calls.add(callee.name);
+        }
+
+        // analytics.trackEvent()
+        else if (
+          callee.type === "MemeberExpression" &&
+          callee.property?.type === "Identifier"
+        ) {
+          calls.add(callee.property.name);
+        }
+
+        // analytics?.trackEvent()
+        else if (
+          callee?.type === "OptionalMemberExpression" &&
+          callee.property?.type === "Identifier"
+        ) {
+          calls.add(callee.property.name);
+        }
       }
+
       for (const key of Object.keys(current)) {
         const value = current[key];
         if (Array.isArray(value)) {
@@ -89,7 +108,10 @@ export class ChunkService {
     });
 
     traverse(ast, {
-      FunctionDeclaration(path) {
+      FunctionDeclaration: (path) => {
+        const name = path.node.id?.name ?? "anonymous";
+        const isComponent = /^[A-Z]/.test(name);
+
         const calls = extractFunctionCalls(path.node);
         const parameters = extractParameters(path.node.params);
         const returnType = extractreturnType(path.node);
@@ -97,8 +119,8 @@ export class ChunkService {
         chunks.push({
           workspaceId,
           filePath,
-          name: path.node.id?.name || "anonymous",
-          type: ChunkType.FUNCTION,
+          name,
+          type: isComponent ? ChunkType.COMPONENT : ChunkType.FUNCTION,
           content: code.slice(path.node.start!, path.node.end!),
           startLine: path.node.loc?.start.line ?? 0,
           endLine: path.node.loc?.end.line ?? 0,
@@ -114,7 +136,8 @@ export class ChunkService {
           embeddingStatus: EmbeddingStatus.PENDING,
         });
       },
-      VariableDeclarator(path) {
+
+      VariableDeclarator: (path) => {
         const init = path.node.init;
         if (
           !init ||
@@ -123,13 +146,13 @@ export class ChunkService {
         ) {
           return;
         }
+        const name = path.node.id.type === "Identifier" ? path.node.id.name : "anonymous";
+        const isComponent = /^[A-Z]/.test(name);
+
         const calls = extractFunctionCalls(init);
         const parameters = extractParameters(init.params);
         const returnType = extractreturnType(init);
 
-        const name =
-          path.node.id.type === "Identifier" ? path.node.id.name : "anonymous";
-        const isComponent = /^[A-Z]/.test(name);
         chunks.push({
           workspaceId,
           filePath,
@@ -149,6 +172,7 @@ export class ChunkService {
           embeddingStatus: EmbeddingStatus.PENDING,
         });
       },
+
       ClassDeclaration(path) {
         chunks.push({
           workspaceId,
@@ -166,6 +190,7 @@ export class ChunkService {
           resolvedImports: [],
           embeddingStatus: EmbeddingStatus.PENDING,
         });
+        
         path.node.body.body.forEach((member) => {
           if (member.type !== "ClassMethod") return;
           const calls = extractFunctionCalls(member);

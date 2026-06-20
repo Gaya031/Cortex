@@ -1,7 +1,7 @@
-import { ChunkRepository } from "../chunk/chunk.repository.js";
+import { GraphRepository } from "../graph/graph.repository.js";
 
 export class CallgraphService {
-  private readonly chunkRepository = new ChunkRepository();
+  private readonly graphRepository = new GraphRepository();
 
   private buildReverseGraph(edges: { from: string; to: string }[]) {
     const reverseGraph = new Map<string, string[]>();
@@ -14,132 +14,152 @@ export class CallgraphService {
     return reverseGraph;
   }
 
+  // async buildCallGraph(workspaceId: string) {
+  //   const chunks = await this.chunkRepository.findByWorkspace(workspaceId);
+
+  //   const nodes = chunks.map((chunk) => ({
+  //     id: `${chunk.filePath}:${chunk.name}`,
+  //     name: chunk.name,
+  //     filePath: chunk.filePath,
+  //     type: chunk.type,
+  //   }));
+
+  //   const functionMap = new Map<string, string[]>();
+
+  //   const COMMON_BUILT_INS = new Set([
+  //     "useState",
+  //     "useEffect",
+  //     "useContext",
+  //     "useReducer",
+  //     "useCallback",
+  //     "useMemo",
+  //     "useRef",
+  //     "useLayoutEffect",
+  //     "setTimeout",
+  //     "setInterval",
+  //     "clearTimeout",
+  //     "clearInterval",
+  //     "parseInt",
+  //     "parseFloat",
+  //     "isNaN",
+  //     "isFinite",
+  //     "decodeURI",
+  //     "decodeURIComponent",
+  //     "encodeURI",
+  //     "encodeURIComponent",
+  //     "String",
+  //     "Number",
+  //     "Boolean",
+  //     "Array",
+  //     "Object",
+  //     "Function",
+  //     "Symbol",
+  //     "BigInt",
+  //     "Math",
+  //     "Date",
+  //     "RegExp",
+  //     "Error",
+  //     "Promise",
+  //     "Map",
+  //     "Set",
+  //     "WeakMap",
+  //     "WeakSet",
+  //     "JSON",
+  //     "Console",
+  //     "require",
+  //     "import",
+  //     "console",
+  //     "map",
+  //     "filter",
+  //     "reduce",
+  //     "forEach",
+  //     "find",
+  //     "some",
+  //     "every",
+  //     "push",
+  //     "pop",
+  //     "shift",
+  //     "unshift",
+  //     "slice",
+  //     "splice",
+  //     "concat",
+  //     "join",
+  //     "split",
+  //     "replace",
+  //     "match",
+  //     "test",
+  //     "exec",
+  //     "log",
+  //     "error",
+  //     "warn",
+  //     "info",
+  //     "debug",
+  //     "dir",
+  //     "table",
+  //     "clear",
+  //     "time",
+  //     "timeEnd",
+  //     "then",
+  //     "catch",
+  //     "finally",
+  //     "resolve",
+  //     "reject",
+  //     "all",
+  //     "race",
+  //     "toString",
+  //     "hasOwnProperty",
+  //     "valueOf",
+  //     "isPrototypeOf",
+  //     "propertyIsEnumerable",
+  //     "bind",
+  //     "call",
+  //     "apply",
+  //   ]);
+
+  //   for (const chunk of chunks) {
+  //     if (COMMON_BUILT_INS.has(chunk.name)) continue;
+
+  //     const nodeId = `${chunk.filePath}:${chunk.name}`;
+
+  //     if (!functionMap.has(chunk.name)) {
+  //       functionMap.set(chunk.name, []);
+  //     }
+  //     functionMap.get(chunk.name)!.push(nodeId);
+  //   }
+  //   const edges = [];
+  //   for (const chunk of chunks) {
+  //     for (const calledFunction of chunk.calls ?? []) {
+  //       const targets = functionMap.get(calledFunction);
+  //       if (!targets) continue;
+  //       for (const target of targets) {
+  //         edges.push({
+  //           from: `${chunk.filePath}:${chunk.name}`,
+  //           to: target,
+  //         });
+  //       }
+  //     }
+  //   }
+  //   return { nodes, edges };
+  // }
+
   async buildCallGraph(workspaceId: string) {
-    const chunks = await this.chunkRepository.findByWorkspace(workspaceId);
-
-    const nodes = chunks.map((chunk) => ({
-      id: `${chunk.filePath}:${chunk.name}`,
-      name: chunk.name,
-      filePath: chunk.filePath,
-      type: chunk.type,
-    }));
-
-    const functionMap = new Map<string, string[]>();
-
-    const COMMON_BUILT_INS = new Set([
-      "useState",
-      "useEffect",
-      "useContext",
-      "useReducer",
-      "useCallback",
-      "useMemo",
-      "useRef",
-      "useLayoutEffect",
-      "setTimeout",
-      "setInterval",
-      "clearTimeout",
-      "clearInterval",
-      "parseInt",
-      "parseFloat",
-      "isNaN",
-      "isFinite",
-      "decodeURI",
-      "decodeURIComponent",
-      "encodeURI",
-      "encodeURIComponent",
-      "String",
-      "Number",
-      "Boolean",
-      "Array",
-      "Object",
-      "Function",
-      "Symbol",
-      "BigInt",
-      "Math",
-      "Date",
-      "RegExp",
-      "Error",
-      "Promise",
-      "Map",
-      "Set",
-      "WeakMap",
-      "WeakSet",
-      "JSON",
-      "Console",
-      "require",
-      "import",
-      "console",
-      "map",
-      "filter",
-      "reduce",
-      "forEach",
-      "find",
-      "some",
-      "every",
-      "push",
-      "pop",
-      "shift",
-      "unshift",
-      "slice",
-      "splice",
-      "concat",
-      "join",
-      "split",
-      "replace",
-      "match",
-      "test",
-      "exec",
-      "log",
-      "error",
-      "warn",
-      "info",
-      "debug",
-      "dir",
-      "table",
-      "clear",
-      "time",
-      "timeEnd",
-      "then",
-      "catch",
-      "finally",
-      "resolve",
-      "reject",
-      "all",
-      "race",
-      "toString",
-      "hasOwnProperty",
-      "valueOf",
-      "isPrototypeOf",
-      "propertyIsEnumerable",
-      "bind",
-      "call",
-      "apply",
+    const [nodes, callEdges] = await Promise.all([
+      this.graphRepository.getFunctionNodes(workspaceId),
+      this.graphRepository.getCallEdges(workspaceId),
     ]);
 
-    for (const chunk of chunks) {
-      if (COMMON_BUILT_INS.has(chunk.name)) continue;
-
-      const nodeId = `${chunk.filePath}:${chunk.name}`;
-
-      if (!functionMap.has(chunk.name)) {
-        functionMap.set(chunk.name, []);
-      }
-      functionMap.get(chunk.name)!.push(nodeId);
-    }
-    const edges = [];
-    for (const chunk of chunks) {
-      for (const calledFunction of chunk.calls ?? []) {
-        const targets = functionMap.get(calledFunction);
-        if (!targets) continue;
-        for (const target of targets) {
-          edges.push({
-            from: `${chunk.filePath}:${chunk.name}`,
-            to: target,
-          });
-        }
-      }
-    }
-    return { nodes, edges };
+    return {
+      nodes: nodes.map((node) => ({
+        id: node.nodeId,
+        name: node.name,
+        filePath: node.filePath,
+        type: node.type,
+      })),
+      edges: callEdges.map((edge) => ({
+        from: edge.source,
+        to: edge.target,
+      })),
+    };
   }
 
   async getFunctionImpact(workspaceId: string, functionId: string) {
@@ -159,8 +179,6 @@ export class CallgraphService {
         dfs(caller);
       }
     };
-    console.log("Function id: ", functionId);
-    console.log("Edges: ", graph.edges);
     dfs(functionId);
 
     return {
@@ -176,6 +194,7 @@ export class CallgraphService {
 
     const entryPoints = new Set<string>();
     const dfs = (node: string, visited = new Set<string>()) => {
+      if (visited.has(node)) return;
       visited.add(node);
       const callers = reverseGraph.get(node);
       if (!callers || callers.length === 0) {
@@ -188,5 +207,36 @@ export class CallgraphService {
     };
     dfs(functionId);
     return Array.from(entryPoints);
+  }
+
+  async getDownStreamImpace(workspaceId: string, functionId: string) {
+    const graph = await this.buildCallGraph(workspaceId);
+    const forwardGraph = new Map<string, string[]>();
+
+    for (const edge of graph.edges) {
+      if (!forwardGraph.has(edge.from)) {
+        forwardGraph.set(edge.from, []);
+      }
+      forwardGraph.get(edge.from)!.push(edge.to);
+    }
+    const visited = new Set<string>();
+    const affected = new Set<string>();
+
+    const dfs = (node: string) => {
+      const children = forwardGraph.get(node);
+      if (!children) return;
+      for (const child of children) {
+        if (visited.has(child)) continue;
+        visited.add(child);
+        affected.add(child);
+        dfs(child);
+      }
+    };
+    dfs(functionId);
+    return {
+      function: functionId,
+      downStreamImpactScore: affected.size,
+      affectedFunctions: Array.from(affected),
+    };
   }
 }

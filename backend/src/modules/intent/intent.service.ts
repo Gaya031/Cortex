@@ -2,6 +2,7 @@ import { AIService } from "../ai/ai.service.js";
 import { ContextService } from "../context/context.service.js";
 import { buildIntentPrompt } from "../../shared/prompts/intent.prompt.js";
 import { IntelligenceService } from "../intelligence/intelligence.service.js";
+import { parseAIJson } from "../../shared/utils/ai.utils.js";
 
 export class IntentService {
   private readonly contextService = new ContextService();
@@ -24,8 +25,9 @@ export class IntentService {
     const intelligenceReport = await this.intelligenceService.generateReport(workspaceId);
     const prompt = buildIntentPrompt(goal, intelligenceReport);
     const response = await this.aiService.generate(prompt);
+    const cleaned = parseAIJson(response || "");
     try {
-      parsed = typeof response === "string" ? JSON.parse(response) : { raw: response };
+      parsed = typeof response === "string" ? JSON.parse(cleaned) : { raw: response };
     } catch {
       parsed = { raw: response };
     }

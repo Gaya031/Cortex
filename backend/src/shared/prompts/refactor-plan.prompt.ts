@@ -44,3 +44,32 @@ Return ONLY JSON:
 }
 `;
 }
+
+
+export function buildRepositoryContextPrompt(repositoryContext: any, goal: string){
+ return `You are an expert software architect.
+Repository Context:
+${repositoryContext.context}
+User Goal:
+${goal}
+Supported actions:
+1. RENAME_FUNCTION
+{
+  "type": "RENAME_FUNCTION",
+  "oldName": "...",
+  "newName": "..."
+}
+2. MOVE_FUNCTION
+{
+  "type": "MOVE_FUNCTION",
+  "function": "...",
+  "from": "...",
+  "to": "..."
+}
+Return ONLY valid JSON.
+Example:
+{
+  "summary": "...",
+  "actions": [...]
+}`
+}

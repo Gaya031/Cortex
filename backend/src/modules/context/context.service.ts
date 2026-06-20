@@ -7,14 +7,15 @@ import { RepositoryContext } from "./context.types.js";
 export class ContextService {
   private readonly architectureService = new ArchitectureService();
   private readonly decisionService = new DecisionService();
-  private readonly intelligenceService = new IntelligenceService();
+  // private readonly intelligenceService = new IntelligenceService();
   private readonly embeddingService = new EmbeddingService();
 
   async buildProjectContext(workspaceId: string) {
+    const intelligenceService = new IntelligenceService();
     const [architecture, decisions, risks] = await Promise.all([
       this.architectureService.getArchitectureSummary(workspaceId),
       this.decisionService.getWorkspaceDecisions(workspaceId),
-      this.intelligenceService.getRiskAnalysis(workspaceId),
+      intelligenceService.getRiskAnalysis(workspaceId),
     ]);
     return {
       workspaceId,
