@@ -1,5 +1,5 @@
 import { AIService } from "../ai/ai.service.js";
-import { ArchitectureService } from "../architecture/architecture.serivce.js";
+import { ArchitectureService } from "../architecture/architecture.service.js";
 import { ChunkRepository } from "../chunk/chunk.repository.js";
 import { ContextService } from "../context/context.service.js";
 import { GraphqueryService } from "../graph-query/graph-query.service.js";

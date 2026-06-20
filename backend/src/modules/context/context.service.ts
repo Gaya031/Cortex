@@ -1,4 +1,4 @@
-import { ArchitectureService } from "../architecture/architecture.serivce.js";
+import { ArchitectureService } from "../architecture/architecture.service.js";
 import { DecisionService } from "../decision/decision.service.js";
 import { EmbeddingService } from "../embedding/embedding.service.js";
 import { IntelligenceService } from "../intelligence/intelligence.service.js";

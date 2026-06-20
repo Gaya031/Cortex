@@ -16,7 +16,7 @@ export class ResolverService {
     currentFilePath: string,
     importPath: string,
   ) {
-    const resolved = this.resolveImport(currentFilePath, importPath);
+    const resolved = this.resolveFile(workspaceId, currentFilePath, importPath);
     if (!resolved) return null;
     return resolved;
   }
@@ -28,21 +28,31 @@ export class ResolverService {
   ) {
     const basePath = this.resolveImport(currentFilePath, importPath);
 
-    if(!basePath) return null;
+    if (!basePath) return null;
 
     const candidates = [
-        `${basePath}.ts`,
-        `${basePath}.tsx`,
-        `${basePath}.js`,
-        `${basePath}.jsx`,
-        `${basePath}/index.ts`,
-        `${basePath}/index.tsx`,
+      `${basePath}.ts`,
+      `${basePath}.tsx`,
+      `${basePath}.js`,
+      `${basePath}.jsx`,
+      `${basePath}/index.ts`,
+      `${basePath}/index.tsx`,
+      `${basePath}/index.js`,
+      `${basePath}/index.jsx`,
     ];
 
-    for(const candidate of candidates){
-        const file = await this.fileRepository.findByPath(workspaceId, candidate);
-        if(file) return candidate;
-      }
-      return null;
+    const uniqueCandidates = [...new Set(candidates)];
+
+    const files = await this.fileRepository.findByWorkspace(workspaceId);
+    // repository stores the file path in the `path` field
+    const fileSet = new Set(files.map((file) => file.path));
+
+    for (const candidate of uniqueCandidates) {
+      if (fileSet.has(candidate)) return candidate;
+    }
+  }
+
+  isExternalImport(importPath: string) {
+    return !importPath.startsWith(".");
   }
 }

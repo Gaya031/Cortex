@@ -24,25 +24,17 @@ export class FlowExlainerService {
       reverseGraph.get(edge.to)!.push(edge.from);
     }
 
+    const MAX_PATHS = 50;
+
     const paths: { ids: string[]; cycle: boolean }[] = [];
-
-    // const dfs = (nodeId: string, currentPath: string[]) => {
-    //   const callers = reverseGraph.get(nodeId);
-
-    //   if (!callers || callers.length === 0) {
-    //     paths.push([nodeId, ...currentPath]);
-    //     return;
-    //   }
-    //   for (const caller of callers) {
-    //     dfs(caller, [nodeId, ...currentPath]);
-    //   }
-    // };
 
     const dfs = (
       nodeId: string,
       currentPath: string[],
       visited: Set<string>,
     ) => {
+      if (paths.length >= MAX_PATHS) return;
+
       if (visited.has(nodeId)) {
         paths.push({
           ids: [...currentPath, nodeId],
@@ -101,10 +93,19 @@ export class FlowExlainerService {
       }),
     }));
 
+    const impactedNodes = new Set<string>();
+    for (const path of mappedPaths) {
+      path.path.forEach((node) => {
+        if (node.id !== targetNode.id) {
+          impactedNodes.add(node.id);
+        }
+      });
+    }
+
     return {
       target: targetNode.name,
       totalPaths: mappedPaths.length,
-      impactScore: mappedPaths.length,
+      impactScore: impactedNodes.size,
       paths: mappedPaths,
     };
   }

@@ -1,5 +1,5 @@
 import { Request, Response } from "express";
-import { ArchitectureService } from "./architecture.serivce.js";
+import { ArchitectureService } from "./architecture.service.js";
 
 export class ArchitectureController {
   private readonly architectureService = new ArchitectureService();

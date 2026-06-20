@@ -1,4 +1,4 @@
-import { ArchitectureService } from "../architecture/architecture.serivce.js";
+import { ArchitectureService } from "../architecture/architecture.service.js";
 import { CallgraphService } from "../callgraph/callgraph.service.js";
 import { RiskAnalysis } from "./risk.types.js";
 

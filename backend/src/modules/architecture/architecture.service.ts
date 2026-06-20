@@ -4,10 +4,10 @@ export class ArchitectureService {
   private readonly graphRepository = new GraphRepository();
 
   async getCriticalFile(workspaceId: string) {
-    const edges = await this.graphRepository.getImportEdges(workspaceId);
+    const importEdges = await this.graphRepository.getFileImportEdges(workspaceId);
     const counts = new Map<string, number>();
 
-    for (const edge of edges) {
+    for (const edge of importEdges) {
       counts.set(edge.target, (counts.get(edge.target) ?? 0) + 1);
     }
 
@@ -22,19 +22,32 @@ export class ArchitectureService {
   async getOrphanFiles(workspaceId: string) {
     const files = await this.graphRepository.getFileNodes(workspaceId);
 
-    const importEdges = await this.graphRepository.getImportEdges(workspaceId);
+    const importEdges = await this.graphRepository.getFileImportEdges(workspaceId);
 
     const incomingTargets = new Set(importEdges.map((edge) => edge.target));
 
+    const outgoingSources = new Set(importEdges.map((edge) => edge.source));
+    const ENTRY_FILES = [
+      "src/index.ts",
+      "src/main.ts",
+      "src/main.tsx",
+      "src/app.ts",
+      "src/app.tsx",
+    ]
     return files
-      .filter((file) => !incomingTargets.has(file.nodeId))
+      .filter((file) => {
+        if(file.filePath && ENTRY_FILES.includes(file.filePath))return false;
+        const hasIncoming = incomingTargets.has(file.nodeId);
+        const hasOutgoing = outgoingSources.has(file.nodeId);
+        return !hasIncoming && !hasOutgoing;
+      })
       .map((file) => ({
         file: file.filePath ?? file.name.replace("file: ", ""),
       }));
   }
 
   async getHighglyCoupledFiles(workspaceId: string) {
-    const importEdges = await this.graphRepository.getImportEdges(workspaceId);
+    const importEdges = await this.graphRepository.getFileImportEdges(workspaceId);
     const counts = new Map<string, number>();
 
     for (const edge of importEdges) {
@@ -51,7 +64,7 @@ export class ArchitectureService {
   }
 
   async detectCircularDependencies(workspaceId: string) {
-    const importEdges = await this.graphRepository.getImportEdges(workspaceId);
+    const importEdges = await this.graphRepository.getFileImportEdges(workspaceId);
 
     const graph = new Map<string, string[]>();
 
@@ -96,7 +109,7 @@ export class ArchitectureService {
     const uniqueCycles = new Map<string, string[]>();
 
     for (const cycle of cycles) {
-      const normalized = [...cycle].sort().join("|");
+      const normalized = [...cycle].sort().join("->");
       if (!uniqueCycles.has(normalized)) {
         uniqueCycles.set(normalized, cycle);
       }
@@ -121,7 +134,7 @@ export class ArchitectureService {
       this.getOrphanFiles(workspaceId),
       this.getHighglyCoupledFiles(workspaceId),
       this.detectCircularDependencies(workspaceId),
-      this.graphRepository.getImportEdges(workspaceId),
+      this.graphRepository.getFileImportEdges(workspaceId),
     ]);
 
     return {
@@ -140,7 +153,7 @@ export class ArchitectureService {
   }
 
   async getImpactAnalysis(workspacId: string, filePath: string){
-    const importEdges = await this.graphRepository.getImportEdges(workspacId);
+    const importEdges = await this.graphRepository.getFileImportEdges(workspacId);
     const reverseGraph = new Map<string, string[]>();
 
     for(const edge of importEdges){

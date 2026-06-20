@@ -1,5 +1,5 @@
 import { AIService } from "../ai/ai.service.js";
-import { ArchitectureService } from "../architecture/architecture.serivce.js";
+import { ArchitectureService } from "../architecture/architecture.service.js";
 import { DecisionService } from "../decision/decision.service.js";
 import { aiReviewPrompt } from "../../shared/prompts/aiReview.prompt.js";
 import { parseAIJson } from "../../shared/utils/ai.utils.js";
@@ -10,15 +10,15 @@ export class IntelligenceService {
   private readonly aiService = new AIService();
 
   async generateReport(workspaceId: string) {
-    const architecture =
-      await this.architectureService.getArchitectureSummary(workspaceId);
-    const decision =
-      await this.decisionService.getWorkspaceDecisions(workspaceId);
+    const [architecture, decisions] = await Promise.all([
+      this.architectureService.getArchitectureSummary(workspaceId),
+      this.decisionService.getWorkspaceDecisions(workspaceId),
+    ]);
 
     return {
       workspaceId,
       architecture,
-      decision,
+      decisions,
       risks: {
         criticalFiles: architecture.criticalFiles,
         circularDependencies: architecture.circularDependencies,
@@ -32,6 +32,7 @@ export class IntelligenceService {
   async getRiskAnalysis(workspaceId: string) {
     const architecture =
       await this.architectureService.getArchitectureSummary(workspaceId);
+
     const riskMap = new Map<
       string,
       {
@@ -42,6 +43,7 @@ export class IntelligenceService {
       }
     >();
 
+    // critical files
     for (const file of architecture.criticalFiles) {
       const current = riskMap.get(file.file) ?? {
         importCount: 0,
@@ -49,10 +51,12 @@ export class IntelligenceService {
         impactScore: 0,
         circularDependencyCount: 0,
       };
+
       current.importCount = file.importCount;
       riskMap.set(file.file, current);
     }
 
+    // highly coupled files
     for (const file of architecture.highglyCoupledFiles) {
       const current = riskMap.get(file.file) ?? {
         importCount: 0,
@@ -60,10 +64,12 @@ export class IntelligenceService {
         impactScore: 0,
         circularDependencyCount: 0,
       };
+
       current.couplingScore = file.couplingScore;
       riskMap.set(file.file, current);
     }
 
+    // circular dependency files
     for (const cycle of architecture.circularDependencies) {
       for (const file of cycle.cycle) {
         const current = riskMap.get(file) ?? {
@@ -72,44 +78,49 @@ export class IntelligenceService {
           impactScore: 0,
           circularDependencyCount: 0,
         };
+
         current.circularDependencyCount++;
         riskMap.set(file, current);
       }
     }
 
-    const results = [];
+    const impacts = await Promise.all(
+      [...riskMap.entries()].map(async ([file, metrics]) => {
+        const impact = await this.architectureService.getImpactAnalysis(
+          workspaceId,
+          file,
+        );
 
-    for (const [file, metrics] of riskMap.entries()) {
-      const impact = await this.architectureService.getImpactAnalysis(
-        workspaceId,
-        file,
-      );
+        const impactScore = impact.impactScore;
 
-      const impactScore = impact.impactScore;
-      const riskScore =
-        metrics.importCount * 2 +
-        metrics.couplingScore * 3 +
-        impactScore * 4 +
-        metrics.circularDependencyCount * 5;
+        const riskScore =
+          metrics.importCount * 2 +
+          metrics.couplingScore * 3 +
+          impactScore * 4 +
+          metrics.circularDependencyCount * 5;
 
-      let riskLevel: "LOW" | "MEDIUM" | "HIGH" = "LOW";
+        let riskLevel: "LOW" | "MEDIUM" | "HIGH" = "LOW";
 
-      if (riskScore >= 50) riskLevel = "HIGH";
-      else if (riskScore >= 20) riskLevel = "MEDIUM";
+        if (riskScore >= 50) {
+          riskLevel = "HIGH";
+        } else if (riskScore >= 20) {
+          riskLevel = "MEDIUM";
+        }
 
-      results.push({
-        file,
-        importCount: metrics.importCount,
-        couplingScore: metrics.couplingScore,
-        impactScore,
-        circularDependencyCount: metrics.circularDependencyCount,
-        riskScore,
-        riskLevel,
-      });
-    }
-    return results.sort((a, b) => b.riskScore - a.riskScore);
+        return {
+          file,
+          importCount: metrics.importCount,
+          couplingScore: metrics.couplingScore,
+          impactScore,
+          circularDependencyCount: metrics.circularDependencyCount,
+          riskScore,
+          riskLevel,
+        };
+      }),
+    );
+
+    return impacts.sort((a, b) => b.riskScore - a.riskScore);
   }
-
   async getHealthScore(workspaceId: string) {
     const architecture =
       await this.architectureService.getArchitectureSummary(workspaceId);
@@ -172,18 +183,24 @@ export class IntelligenceService {
       );
     }
 
-    let recommendation = "Repository architecture looks healthy.";
+    const recommendations: string[] = [];
 
     if (architecture.circularDependencies.length > 0) {
-      recommendation =
-        "Break circular dependencies and remove orphan files to improve repository health.";
-    } else if (architecture.orphanFiles.length > 0) {
-      recommendation =
-        "Review and remove orphan files that are no longer used.";
-    } else if (architecture.highglyCoupledFiles.length > 0) {
-      recommendation =
-        "Reduce coupling between modules to improve maintainability.";
+      recommendations.push("Break circular dependencies.");
     }
+
+    if (architecture.orphanFiles.length > 0) {
+      recommendations.push("Review orphan files.");
+    }
+
+    if (architecture.highglyCoupledFiles.length > 0) {
+      recommendations.push("Reduce module coupling.");
+    }
+
+    const recommendation = recommendations.length
+      ? recommendations.join(" ")
+      : "Repository architecture looks healthy.";
+
     return {
       score,
       grade,
@@ -195,9 +212,9 @@ export class IntelligenceService {
         totalFiles: architecture.totalFiles,
         criticalFiles: architecture.criticalFiles.length,
         orphanFiles: architecture.orphanFiles.length,
-        circularDependecies: architecture.circularDependencies.length,
+        circularDependencies: architecture.circularDependencies.length,
         highlyCoupledFiles: architecture.highglyCoupledFiles.length,
-        totalDependenceis: architecture.metrics.totalDependencies,
+        totalDependencies: architecture.metrics.totalDependencies,
       },
       deductions: {
         circularDependencies: architecture.circularDependencies.length * 10,
@@ -215,19 +232,19 @@ export class IntelligenceService {
       this.getHealthScore(workspaceId),
     ]);
 
-    const recommendationActions: string[] = [];
+    const recommendationActions = new Set<string>();
     for (const cycle of architecture.circularDependencies) {
-      recommendationActions.push(
+      recommendationActions.add(
         `Break circular dependency involving: ${cycle.cycle.join(" -> ")}`,
       );
     }
 
     for (const orphan of architecture.orphanFiles) {
-      recommendationActions.push(`Review Orphan file: ${orphan.file}`);
+      recommendationActions.add(`Review Orphan file: ${orphan.file}`);
     }
 
     for (const file of architecture.highglyCoupledFiles) {
-      recommendationActions.push(`Reduce coupling in ${file.file}`);
+      recommendationActions.add(`Reduce coupling in ${file.file}`);
     }
 
     const topRisks = risks.slice(0, 5);
@@ -243,7 +260,7 @@ export class IntelligenceService {
         metrics: architecture.metrics,
       },
       topRisks,
-      recommendationActions,
+      recommendationActions: Array.from(recommendationActions),
     };
   }
 
