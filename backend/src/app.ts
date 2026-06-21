@@ -13,7 +13,7 @@ app.use(express.json());
 
 app.use(
   cors({
-    origin: ["http://localhost:3001", "https://cortex-code.vercel.app/"],
+    origin: "https://cortex-code.vercel.app",
     credentials: true,
   }),
 );
