@@ -29,7 +29,7 @@ export class ChunkService {
 
         // analytics.trackEvent()
         else if (
-          callee.type === "MemeberExpression" &&
+          callee.type === "MemberExpression" &&
           callee.property?.type === "Identifier"
         ) {
           calls.add(callee.property.name);

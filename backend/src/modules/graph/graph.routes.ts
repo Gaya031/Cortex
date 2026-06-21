@@ -11,6 +11,7 @@ router.get("/dependencies", controller.dependencies.bind(controller));
 router.get("/dependents", controller.dependents.bind(controller));
 
 router.get("/function-calls", controller.functionCalls.bind(controller));
+
 router.get("/function-callers", controller.functionCallers.bind(controller));
 
 router.get("/visual/:workspaceId", controller.visual.bind(controller));

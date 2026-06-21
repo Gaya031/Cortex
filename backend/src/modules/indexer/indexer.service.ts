@@ -98,7 +98,8 @@ export class IndexerService {
       result.edgesCreated += stats.edgesCreated;
     }
     await this.embeddingService.generateWorkspaceEmbeddings(workspaceId);
-
+const callEdgeCount = await this.graphService.buildCallEdges(workspaceId);
+console.log("call edges: ", callEdgeCount);
     return result;
   }
 

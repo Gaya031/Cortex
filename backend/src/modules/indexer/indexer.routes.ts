@@ -16,7 +16,10 @@ router.post("/:workspaceId", async (req, res) => {
     
     // Background indexing
     indexerService.indexWorkspace(workspaceId)
-        .then(() => workspaceRepository.updateStatus(workspaceId, "READY"))
+        .then(() => {
+            workspaceRepository.updateStatus(workspaceId, "READY")
+            console.log("indexing done.");
+        })
         .catch((err) => {
             console.error("Indexing failed:", err);
             workspaceRepository.updateStatus(workspaceId, "FAILED");
