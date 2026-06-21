@@ -33,16 +33,11 @@ export class RefactorPlanService {
     );
 
     const response = await this.aiService.generate(prompt);
-    const cleaned = parseAIJson(response || "");
     if (!response) {
       throw new Error("AI service returned no response");
     }
 
-    try {
-      return JSON.parse(cleaned);
-    } catch {
-      return { raw: response };
-    }
+    return parseAIJson(response);
   }
 
   async generate(workspaceId: string, goal: string) {
@@ -53,16 +48,16 @@ export class RefactorPlanService {
 
     const prompt = buildRepositoryContextPrompt(repositoryContext, goal);
 
-    const raw = (await this.aiService.generate(prompt));
+    const raw = await this.aiService.generate(prompt);
     if (!raw) {
       throw new Error("AI service returned no response");
     }
 
-    const cleaned = parseAIJson(raw);
-
-    const plan = JSON.parse(cleaned);
+    const plan = parseAIJson(raw);
 
     const changeSet = this.changesetService.buildFromPlan(plan);
+    console.log("service: ",plan, changeSet);
+    
     return { plan, changeSet };
   }
 }

@@ -4,6 +4,7 @@ import { env } from "../../config/env.js";
 import { GoogleGenAI } from "@google/genai";
 import { generateHash } from "../../shared/utils/hash.js";
 import { EmbeddingStatus } from "./embedding.types.js";
+import { cache, cacheKeys } from "../../shared/redis/redis.js";
 
 export class EmbeddingService {
   private readonly chunkRepository = new ChunkRepository();
@@ -29,14 +30,23 @@ export class EmbeddingService {
     const embeddings = [];
 
     for (const chunk of chunks) {
-      const result = await this.genAI.models.embedContent({
-        model: "gemini-embedding-001",
-        contents: chunk.content,
-      });
+      const contentHash = generateHash(chunk.content);
+      const key = cacheKeys.embedding(contentHash);
+      let embeddingValues = await cache.getJson<number[]>(key);
 
-      const embeddingValues = result.embeddings?.[0]?.values;
       if (!embeddingValues) {
-        throw new Error(`Failed to generate embedding for chunk ${chunk._id}`);
+        const result = await this.genAI.models.embedContent({
+          model: "gemini-embedding-001",
+          contents: chunk.content,
+        });
+
+        embeddingValues = result.embeddings?.[0]?.values ?? null;
+
+        if (!embeddingValues) {
+          throw new Error(`Failed to generate embedding for chunk ${chunk._id}`);
+        }
+
+        await cache.setJson(key, embeddingValues, 60 * 60 * 24 * 7);
       }
 
       embeddings.push({
@@ -44,7 +54,7 @@ export class EmbeddingService {
         chunkId: chunk._id.toString(),
         filePath: chunk.filePath,
         content: chunk.content,
-        contentHash: generateHash(chunk.content),
+        contentHash,
         embedding: embeddingValues,
         status: EmbeddingStatus.READY,
       });
@@ -56,6 +66,13 @@ export class EmbeddingService {
   }
 
   async embedQuery(query: string) {
+    const key = cacheKeys.queryEmbedding(generateHash(query));
+    const cached = await cache.getJson<number[]>(key);
+
+    if (cached) {
+      return cached;
+    }
+
     const result = await this.genAI.models.embedContent({
       model: "gemini-embedding-001",
       contents: query,
@@ -65,6 +82,8 @@ export class EmbeddingService {
     if (!embeddingValues) {
       throw new Error("Failed to generate embedding for query");
     }
+
+    await cache.setJson(key, embeddingValues, 60 * 60);
 
     return embeddingValues;
   }

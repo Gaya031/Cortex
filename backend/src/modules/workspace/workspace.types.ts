@@ -8,11 +8,14 @@ export enum WorkspaceStatus{
 export interface CreateWorkspaceDto{
     userId: string;
     name: string;
+    localPath: string;
     description?: string;
+    status?: WorkspaceStatus;
 }
 
 export interface Workspace{
     userId: string;
     name: string;
     localPath: string;
+    status?: WorkspaceStatus;
 }

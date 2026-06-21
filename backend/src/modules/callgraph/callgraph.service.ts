@@ -1,4 +1,29 @@
 import { GraphRepository } from "../graph/graph.repository.js";
+import { cache, cacheKeys } from "../../shared/redis/redis.js";
+
+interface CallGraphNode {
+  id: string;
+  label: string;
+  name: string;
+  filePath: string;
+  type: string;
+  graphLayer: string;
+}
+
+interface CallGraphEdge {
+  id: string;
+  from: string;
+  to: string;
+  source: string;
+  target: string;
+  relation: string;
+  graphLayer: string;
+}
+
+interface CallGraph {
+  nodes: CallGraphNode[];
+  edges: CallGraphEdge[];
+}
 
 export class CallgraphService {
   private readonly graphRepository = new GraphRepository();
@@ -143,23 +168,41 @@ export class CallgraphService {
   // }
 
   async buildCallGraph(workspaceId: string) {
+    const key = cacheKeys.graph(workspaceId, "callgraph");
+    const cached = await cache.getJson<CallGraph>(key);
+
+    if (cached) {
+      return cached;
+    }
+
     const [nodes, callEdges] = await Promise.all([
       this.graphRepository.getFunctionNodes(workspaceId),
       this.graphRepository.getCallEdges(workspaceId),
     ]);
 
-    return {
+    const result: CallGraph = {
       nodes: nodes.map((node) => ({
         id: node.nodeId,
+        label: node.name,
         name: node.name,
-        filePath: node.filePath,
+        filePath: node.filePath ?? "",
         type: node.type,
+        graphLayer: "CALL",
       })),
       edges: callEdges.map((edge) => ({
+        id: `${edge.source}-${edge.target}-CALLS`,
         from: edge.source,
         to: edge.target,
+        source: edge.source,
+        target: edge.target,
+        relation: "CALLS",
+        graphLayer: "CALL",
       })),
     };
+
+    await cache.setJson(key, result, 60 * 15);
+
+    return result;
   }
 
   async getFunctionImpact(workspaceId: string, functionId: string) {

@@ -10,6 +10,7 @@ import { WorkspaceRepository } from "../workspace/workspace.repository.js";
 import { FilesystemService } from "../../shared/filesystem/filesystem.service.js";
 import { EmbeddingService } from "../embedding/embedding.service.js";
 import { generateHash } from "../../shared/utils/hash.js";
+import { invalidateWorkspaceCache } from "../../shared/redis/redis.js";
 
 export class IndexerService {
   private readonly fileRepository = new FileRepository();
@@ -31,6 +32,7 @@ export class IndexerService {
 
     await this.chunkRepository.deleteWorkspaceChunks(workspaceId);
     await this.graphRepository.clearWorkspaceGraph(workspaceId);
+    await invalidateWorkspaceCache(workspaceId);
 
     const files = await this.fileSystemService.getAllFiles(workspace.localPath);
     const supportedFiles = files.filter((file) =>
@@ -100,6 +102,8 @@ export class IndexerService {
     await this.embeddingService.generateWorkspaceEmbeddings(workspaceId);
 const callEdgeCount = await this.graphService.buildCallEdges(workspaceId);
 console.log("call edges: ", callEdgeCount);
+    await invalidateWorkspaceCache(workspaceId);
+    console.log(result);
     return result;
   }
 

@@ -1,7 +1,8 @@
 import WorkspaceModel from "../workspace/workspace.model.js";
+import { CreateWorkspaceDto } from "./workspace.types.js";
 
 export class WorkspaceRepository {
-  async create(data: { userId: string; name: string; description?: string }) {
+  async create(data: CreateWorkspaceDto) {
     return WorkspaceModel.create(data);
   }
   async findAll(userId: string) {

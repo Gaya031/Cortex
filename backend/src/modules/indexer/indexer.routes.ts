@@ -13,7 +13,7 @@ router.post("/:workspaceId", async (req, res) => {
     
     // Set to processing immediately
     await workspaceRepository.updateStatus(workspaceId, "PROCESSING");
-    
+    // setTimeInterval(() => {indexing in process}, 2000);
     // Background indexing
     indexerService.indexWorkspace(workspaceId)
         .then(() => {

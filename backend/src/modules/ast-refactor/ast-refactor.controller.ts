@@ -1,6 +1,7 @@
 import { Request, Response } from "express";
 import { AstRefactorService } from "./ast-refactor.service.js";
 import { IndexerService } from "../indexer/indexer.service.js";
+import { invalidateWorkspaceCache } from "../../shared/redis/redis.js";
 
 export class AstRefactorController {
   private readonly astrefactorService = new AstRefactorService();
@@ -15,6 +16,7 @@ export class AstRefactorController {
       sourceFile,
       targetFile,
     );
+    await invalidateWorkspaceCache(workspaceId);
 
     const indexingResult =
       await this.indexerService.indexWorkspace(workspaceId);
@@ -32,7 +34,12 @@ export class AstRefactorController {
       oldName,
       newName,
     );
+    await invalidateWorkspaceCache(workspaceId);
+    const indexingResult =
+      await this.indexerService.indexWorkspace(workspaceId);
 
-    return res.status(200).json({ success: true, result });
+    return res
+      .status(200)
+      .json({ success: true, result, reindex: indexingResult });
   }
 }

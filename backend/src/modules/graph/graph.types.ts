@@ -14,7 +14,8 @@ export enum GraphRelationType{
     IMPORTS = "IMPORTS",
     EXPORTS = "EXPORTS",
     FILE_IMPORTS_FILE = "FILE_IMPORTS_FILE",
-    CALLS = "CALLS"
+    CALLS = "CALLS",
+    FLOW = "FLOW"
 }
 
 export interface GraphNode{
@@ -31,4 +32,3 @@ export interface GraphEdge{
     target: string;
     relation: GraphRelationType;
 }
-

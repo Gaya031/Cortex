@@ -1,6 +1,6 @@
 import { IndexerService } from "../indexer/indexer.service.js";
 import { WorkspaceRepository } from "./workspace.repository.js";
-import { CreateWorkspaceDto } from "./workspace.types.js";
+import { CreateWorkspaceDto, WorkspaceStatus } from "./workspace.types.js";
 import { ChunkRepository } from "../chunk/chunk.repository.js";
 import { GraphRepository } from "../graph/graph.repository.js";
 import { FileRepository } from "../file/file.repository.js";
@@ -21,7 +21,10 @@ export class WorkspaceService {
      private readonly snapshotRepository = new SnapshotRepository()
   ) {}
   async createWorkspace(payload: CreateWorkspaceDto) {
-    const workspace = await this.workspaceRepository.create({ ...payload, status: 'PROCESSING' });
+    const workspace = await this.workspaceRepository.create({
+      ...payload,
+      status: WorkspaceStatus.PROCESSING,
+    });
     
     // Background indexing to prevent blocking
     this.indexerService.indexWorkspace(workspace._id.toString())

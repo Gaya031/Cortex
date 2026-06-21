@@ -2,6 +2,8 @@ import { GoogleGenAI } from "@google/genai";
 import { env } from "../../config/env.js";
 import { ContextService } from "../context/context.service.js";
 import { FlowExlainerService } from "../flow-explainer/flow-explainer.service.js";
+import { cache, cacheKeys } from "../../shared/redis/redis.js";
+import { generateHash } from "../../shared/utils/hash.js";
 
 export class AIService {
   private readonly client = new GoogleGenAI({ apiKey: env.geminiApiKey });
@@ -9,11 +11,22 @@ export class AIService {
   private readonly flowExplainerService = new FlowExlainerService();
 
   async generate(prompt: string) {
+    const key = cacheKeys.aiPrompt(generateHash(prompt));
+    const cached = await cache.getJson<string>(key);
+
+    if (cached) {
+      return cached;
+    }
+
     const response = await this.client.models.generateContent({
       model: "gemini-2.5-flash",
       contents: prompt,
     });
-    return response.text;
+    const text = response.text ?? "";
+
+    await cache.setJson(key, text, 60 * 60 * 12);
+
+    return text;
   }
 
   private isFlowQuestion(question: string) {
@@ -63,6 +76,20 @@ export class AIService {
   }
 
   async answerRepositoryQuestion(workspaceId: string, question: string) {
+    const key = cacheKeys.aiRepositoryQuestion(
+      workspaceId,
+      generateHash(question),
+    );
+    const cached = await cache.getJson<{
+      answer: string | undefined;
+      sources: unknown[];
+      mode: string;
+    }>(key);
+
+    if (cached) {
+      return cached;
+    }
+
     if (this.isFlowQuestion(question)) {
       let functionName = await this.findRelevantFunction(workspaceId, question);
       if (functionName) {
@@ -108,11 +135,15 @@ ${JSON.stringify(flow, null, 2)}
             ).values(),
           ];
 
-          return {
+          const result = {
             answer: flowResponse.text,
             sources,
             mode: "FLOW",
           };
+
+          await cache.setJson(key, result, 60 * 60 * 6);
+
+          return result;
         }
       }
     }
@@ -155,10 +186,14 @@ ${repositoryContext.context}
       ).values(),
     ];
 
-    return {
+    const result = {
       answer: response.text,
       sources,
       mode: "RAG",
     };
+
+    await cache.setJson(key, result, 60 * 60 * 6);
+
+    return result;
   }
 }

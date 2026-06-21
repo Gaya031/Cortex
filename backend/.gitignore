@@ -13,3 +13,4 @@ coverage
 *.ntvs*
 *.njsproj
 *.sln
+.DS_Store

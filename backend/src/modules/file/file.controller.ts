@@ -4,6 +4,7 @@ import { WorkspaceRepository } from "../workspace/workspace.repository.js";
 import { FilesystemService } from "../../shared/filesystem/filesystem.service.js";
 import { IndexerService } from "../indexer/indexer.service.js";
 import path from "path";
+import { invalidateWorkspaceCache } from "../../shared/redis/redis.js";
 
 const fileService = new FileService();
 const workspaceRepository = new WorkspaceRepository();
@@ -84,6 +85,7 @@ export class FileController {
 
       const absolutePath = path.join(workspace.localPath, filePath);
       await filesystemService.writeFile(absolutePath, content);
+      await invalidateWorkspaceCache(workspaceId);
 
       // Trigger re-indexing of workspace
       let indexResult = null;
@@ -107,4 +109,3 @@ export class FileController {
     }
   }
 }
-

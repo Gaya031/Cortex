@@ -4,6 +4,7 @@ import { WorkspaceRepository } from "../workspace/workspace.repository.js";
 import { SnapshotRepository } from "./snapshot.repository.js";
 import { IndexerService } from "../indexer/indexer.service.js";
 import { file } from "@babel/types";
+import { invalidateWorkspaceCache } from "../../shared/redis/redis.js";
 
 export class SnapshotService {
   private readonly workspaceRepository = new WorkspaceRepository();
@@ -56,6 +57,7 @@ export class SnapshotService {
     const reindex = await this.indexerService.indexWorkspace(
       snapshot.workspaceId.toString(),
     );
+    await invalidateWorkspaceCache(snapshot.workspaceId.toString());
 
     return {
       restored: snapshot.files.length,
