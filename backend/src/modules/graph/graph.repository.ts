@@ -44,6 +44,15 @@ export class GraphRepository {
     });
   }
 
+  async getImportEdges(workspaceId: string) {
+    return GraphEdgeModel.find({
+      workspaceId,
+      relation: {
+        $in: [GraphRelationType.IMPORTS, GraphRelationType.FILE_IMPORTS_FILE],
+      },
+    });
+  }
+
   async getFileImportEdges(workspaceId: string) {
     return GraphEdgeModel.find({
       workspaceId,

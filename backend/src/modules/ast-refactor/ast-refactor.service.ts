@@ -77,6 +77,18 @@ export class AstRefactorService {
 
         path.remove();
       },
+      VariableDeclarator(path: NodePath<t.VariableDeclarator>) {
+        if (
+          path.node.id.type === "Identifier" &&
+          path.node.id.name === functionName &&
+          path.node.init &&
+          (t.isArrowFunctionExpression(path.node.init) ||
+            t.isFunctionExpression(path.node.init))
+        ) {
+          extracted = t.cloneNode(path.parentPath.node as any, true);
+          path.parentPath.remove();
+        }
+      },
     });
 
     if (!extracted) {
@@ -139,6 +151,85 @@ export class AstRefactorService {
     };
   }
 
+  private async updateImportsForMovedFunction(
+    workspaceId: string,
+    functionName: string,
+    oldFile: string,
+    newFile: string,
+  ) {
+    const { workspace, files } = await this.getWorkspaceFiles(workspaceId);
+
+    const buildImportPath = this.buildImportPath.bind(this);
+
+    const filesystemService = this.filesystemService;
+
+    for (const filePath of files) {
+      const relativeFile = filesystemService.getRelativePath(
+        workspace.localPath,
+        filePath,
+      );
+
+      // Skip the destination file itself
+      if (relativeFile === newFile) {
+        continue;
+      }
+
+      const code = await filesystemService.readFile(filePath);
+
+      const ast = parse(code, {
+        sourceType: "module",
+        plugins: ["typescript", "jsx"],
+      });
+
+      let changed = false;
+
+      const oldImportPath = buildImportPath(relativeFile, oldFile);
+
+      const newImportPath = buildImportPath(relativeFile, newFile);
+
+      const traverseFn = (traverse as any).default || traverse;
+
+      traverseFn(ast, {
+        ImportDeclaration(path: NodePath<t.ImportDeclaration>) {
+          const importsFunction = path.node.specifiers.some(
+            (
+              specifier:
+                | t.ImportSpecifier
+                | t.ImportDefaultSpecifier
+                | t.ImportNamespaceSpecifier,
+            ) =>
+              t.isImportSpecifier(specifier) &&
+              t.isIdentifier(specifier.imported) &&
+              specifier.imported.name === functionName,
+          );
+
+          if (!importsFunction) {
+            return;
+          }
+
+          // Only rewrite imports that actually
+          // come from the old file.
+          if (path.node.source.value !== oldImportPath) {
+            return;
+          }
+
+          path.node.source.value = newImportPath;
+
+          changed = true;
+        },
+      });
+
+      if (changed) {
+        await filesystemService.writeFile(
+          filePath,
+          generate(ast, {
+            retainLines: true,
+          }).code,
+        );
+      }
+    }
+  }
+
   async previewMoveFunction(
     workspaceId: string,
     functionName: string,
@@ -189,6 +280,12 @@ export class AstRefactorService {
 
     await this.filesystemService.writeFile(sourcePath, result.sourceAfter);
     await this.filesystemService.writeFile(targetPath, result.targetAfter);
+    await this.updateImportsForMovedFunction(
+      workspaceId,
+      functionName,
+      sourceFile,
+      targetFile,
+    );
 
     return {
       success: true,
@@ -223,9 +320,43 @@ export class AstRefactorService {
             path.node.id.name = newName;
           }
         },
-        Identifier(path: NodePath<t.Identifier>) {
-          if (path.node.name === oldName) {
-            path.node.name = newName;
+        CallExpression(path: NodePath<t.CallExpression>) {
+          if (
+            t.isIdentifier(path.node.callee) &&
+            path.node.callee.name === oldName
+          ) {
+            path.node.callee.name = newName;
+          }
+        },
+
+        ImportSpecifier(path: NodePath<t.ImportSpecifier>) {
+          if (
+            t.isIdentifier(path.node.imported) &&
+            path.node.imported.name === oldName
+          ) {
+            path.node.imported.name = newName;
+          }
+
+          if (
+            t.isIdentifier(path.node.local) &&
+            path.node.local.name === oldName
+          ) {
+            path.node.local.name = newName;
+          }
+        },
+
+        ExportSpecifier(path: NodePath<t.ExportSpecifier>) {
+          if (
+            t.isIdentifier(path.node.local) &&
+            path.node.local.name === oldName
+          ) {
+            path.node.local.name = newName;
+          }
+        },
+
+        VariableDeclarator(path: NodePath<t.VariableDeclarator>) {
+          if (t.isIdentifier(path.node.id) && path.node.id.name === oldName) {
+            path.node.id.name = newName;
           }
         },
       });
@@ -242,7 +373,7 @@ export class AstRefactorService {
         });
       }
     }
-    
+
     return { affectedFiles };
   }
 
@@ -266,5 +397,4 @@ export class AstRefactorService {
       filesUpdated: preview.affectedFiles.length,
     };
   }
-
 }

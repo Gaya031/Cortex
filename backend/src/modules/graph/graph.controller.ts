@@ -13,7 +13,9 @@ export class GraphController {
   }
 
   async dependencies(req: Request, res: Response) {
-    const { workspaceId, filePath } = req.body;
+    const workspaceId = String(req.query.workspaceId);
+    const filePath = String(req.query.filePath);
+
     const dependencies = await this.graphqueryService.getDependencies(
       workspaceId,
       filePath,
@@ -22,7 +24,9 @@ export class GraphController {
   }
 
   async dependents(req: Request, res: Response) {
-    const { workspaceId, filePath } = req.body;
+    const workspaceId = String(req.query.workspaceId);
+    const filePath = String(req.query.filePath);
+
     const dependents = await this.graphqueryService.getDependents(
       workspaceId,
       filePath,
@@ -50,7 +54,31 @@ export class GraphController {
     if (!workspaceId) {
       return res.status(400).json({ error: "workspaceId is required" });
     }
-    const result = await this.graphService.getProjectFlowGraph(workspaceId);
+    const result = await this.graphService.getExecutionFlowGraph(workspaceId);
+    return res.status(200).json({ result });
+  }
+
+  async functionCalls(req: Request, res: Response) {
+    const workspaceId = String(req.query.workspaceId);
+    const functionNodeId = String(req.query.functionNodeId);
+
+    const result = await this.graphqueryService.getFunctionCalls(
+      workspaceId,
+      functionNodeId,
+    );
+
+    return res.status(200).json({ result });
+  }
+
+  async functionCallers(req: Request, res: Response) {
+    const workspaceId = String(req.query.workspaceId);
+    const functionNodeId = String(req.query.functionNodeId);
+
+    const result = await this.graphqueryService.getFunctionCallers(
+      workspaceId,
+      functionNodeId,
+    );
+
     return res.status(200).json({ result });
   }
 }
