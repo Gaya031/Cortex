@@ -75,6 +75,18 @@ export interface FunctionImpact {
   affectedFunctions: string[];
 }
 
+export interface FileImpact {
+  file: string;
+  impactScore: number;
+  affectedFiles: string[];
+}
+
+export interface DownstreamImpact {
+  function: string;
+  downStreamImpactScore: number;
+  affectedFunctions: string[];
+}
+
 export interface NodeDetails {
   id: string;
   name: string;

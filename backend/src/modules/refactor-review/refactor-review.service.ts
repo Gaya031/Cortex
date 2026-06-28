@@ -3,6 +3,7 @@ import { ChangeSet } from "../changeset/changeset.types.js";
 import { ChunkRepository } from "../chunk/chunk.repository.js";
 import { RiskService } from "../risk/risk.service.js";
 import { ValidationService } from "../validation/validation.service.js";
+import { buildChunkNodeId } from "../../shared/utils/chunk-node.util.js";
 
 export class RefactoerReviewService {
   private readonly validationService = new ValidationService();
@@ -24,7 +25,7 @@ export class RefactoerReviewService {
       const chunk = chunks.find((c) => c.name === rename.oldName);
       if (!chunk) continue;
 
-      const functionId = `${chunk.filePath}:${chunk.name}`;
+      const functionId = buildChunkNodeId(chunk);
 
       const impact = await this.callgraphService.getFunctionImpact(
         workspaceId,
@@ -45,7 +46,7 @@ export class RefactoerReviewService {
         (c) => c.name === move.function && c.filePath === move.from,
       );
       if (!chunk) continue;
-      const functionId = `${chunk.filePath}:${chunk.name}`;
+      const functionId = buildChunkNodeId(chunk);
 
       const impact = await this.callgraphService.getFunctionImpact(
         workspaceId,

@@ -12,6 +12,7 @@ import { useEffect, useMemo, useState } from "react";
 import WorkspaceSidebar from "@/components/platform/WorkspaceSidebar";
 import {
   HealthScore,
+  AIReview,
   intelligenceApi,
   RepositoryReport,
   RiskItem,
@@ -39,6 +40,8 @@ export default function InsightsDashboard({
   const [health, setHealth] = useState<HealthScore | null>(null);
   const [risks, setRisks] = useState<RiskItem[]>([]);
   const [report, setReport] = useState<RepositoryReport | null>(null);
+  const [aiReview, setAiReview] = useState<AIReview | null>(null);
+  const [reviewLoading, setReviewLoading] = useState(false);
 
   useEffect(() => {
     let cancelled = false;
@@ -242,6 +245,66 @@ export default function InsightsDashboard({
                       </div>
                     ))}
                 </div>
+              </div>
+            </section>
+
+            <section className="rounded-2xl border border-white/[0.06] bg-[#090e15]/60 backdrop-blur-md">
+              <div className="flex items-center justify-between border-b border-white/[0.06] px-5 py-4">
+                <p className="flex items-center gap-2 text-xs font-bold text-white uppercase tracking-wider">
+                  <Sparkles className="h-4 w-4 text-cyan-300" />
+                  AI Architecture Review
+                </p>
+                <button
+                  type="button"
+                  disabled={reviewLoading}
+                  onClick={async () => {
+                    try {
+                      setReviewLoading(true);
+                      const review = await intelligenceApi.getReview(workspaceId);
+                      setAiReview(review);
+                    } catch {
+                      setAiReview({ raw: "Could not generate AI review." });
+                    } finally {
+                      setReviewLoading(false);
+                    }
+                  }}
+                  className="rounded-lg border border-cyan-400/25 bg-cyan-950/20 px-3 py-1.5 text-[10px] font-bold text-cyan-200 disabled:opacity-50"
+                >
+                  {reviewLoading ? "Generating…" : "Generate review"}
+                </button>
+              </div>
+              <div className="space-y-3 p-5 text-xs leading-relaxed text-slate-300">
+                {aiReview ? (
+                  <>
+                    {aiReview.summary && (
+                      <p className="whitespace-pre-wrap">{aiReview.summary}</p>
+                    )}
+                    {aiReview.strengths?.map((item) => (
+                      <p key={item} className="text-emerald-300">
+                        + {item}
+                      </p>
+                    ))}
+                    {aiReview.weaknesses?.map((item) => (
+                      <p key={item} className="text-amber-200">
+                        − {item}
+                      </p>
+                    ))}
+                    {aiReview.recommendations?.map((item) => (
+                      <p key={item} className="text-cyan-200">
+                        → {item}
+                      </p>
+                    ))}
+                    {aiReview.raw && !aiReview.summary && (
+                      <p className="whitespace-pre-wrap font-mono text-[11px] text-slate-400">
+                        {aiReview.raw}
+                      </p>
+                    )}
+                  </>
+                ) : (
+                  <p className="text-slate-500">
+                    Run an AI review for narrative feedback on architecture health.
+                  </p>
+                )}
               </div>
             </section>
           </div>

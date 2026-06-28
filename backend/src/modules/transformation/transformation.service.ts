@@ -20,7 +20,7 @@ export class TransformationService {
     return {
       file: filePath,
       functions: chunks
-        .filter((c) => c.type === ChunkType.FUNCTION || ChunkType.METHOD)
+        .filter((c) => c.type === ChunkType.FUNCTION || c.type === ChunkType.METHOD)
         .map((c) => ({
           name: c.name,
           parameters: c.parameters ?? [],

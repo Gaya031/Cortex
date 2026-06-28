@@ -1,4 +1,3 @@
-import { FunctionParameter } from "@babel/types";
 import { EmbeddingStatus } from "../embedding/embedding.types.js";
 
 export enum ChunkType {
@@ -8,6 +7,19 @@ export enum ChunkType {
   METHOD = "METHOD",
   INTERFACE = "INTERFACE",
   TYPE = "TYPE",
+  MODULE = "MODULE",
+}
+
+export interface ImportBinding {
+  localName: string;
+  importedName: string;
+  modulePath: string;
+  resolvedFilePath?: string;
+}
+
+export interface ChunkParameter {
+  name: string;
+  type: string;
 }
 
 export interface Chunk {
@@ -22,9 +34,10 @@ export interface Chunk {
   exports: string[];
   dependencies: string[];
   resolvedImports: string[];
+  importBindings?: ImportBinding[];
   calls?: string[];
   calledBy?: string[];
-  parameters?: FunctionParameter[];
+  parameters?: ChunkParameter[];
   returnType?: string;
   parentChunk?: string;
   embeddingStatus: EmbeddingStatus;

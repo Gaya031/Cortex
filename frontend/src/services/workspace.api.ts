@@ -55,4 +55,13 @@ export const workspaceApi = {
   async delete(workspaceId: string): Promise<void> {
     await api.delete(`/workspaces/${workspaceId}`);
   },
+
+  async listGithubRepos(token?: string): Promise<
+    Array<{ fullName: string; defaultBranch: string; private: boolean }>
+  > {
+    const res = await api.get("/github/repos", {
+      params: token ? { token } : undefined,
+    });
+    return res.data.data ?? [];
+  },
 };

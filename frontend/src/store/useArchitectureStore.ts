@@ -3,6 +3,8 @@ import { create } from "zustand";
 import {
   ArchitectureGraph,
   ArchitectureSummary,
+  DownstreamImpact,
+  FileImpact,
   FunctionImpact,
   GraphViewType,
   ArchitectureNode,
@@ -21,13 +23,19 @@ interface ArchitectureStore {
 
   impactResult: FunctionImpact | null;
 
+  fileImpactResult: FileImpact | null;
+
+  downstreamResult: DownstreamImpact | null;
+
   loading: boolean;
   error: string | null;
   searchTerm: string;
   activeTypes: string[];
 
   layoutDirection: "LR" | "TB";
+  layoutSeed: number;
   setLayoutDirection: (dir: "LR" | "TB") => void;
+  requestLayoutReset: () => void;
   setActiveView: (view: GraphViewType) => void;
   setSearchTerm: (term: string) => void;
   toggleType: (type: string) => void;
@@ -61,12 +69,23 @@ interface ArchitectureStore {
     workspaceId: string,
     functionId: string,
   ) => Promise<void>;
+
+  loadFileImpact: (
+    workspaceId: string,
+    filePath: string,
+  ) => Promise<void>;
+
+  loadDownstreamImpact: (
+    workspaceId: string,
+    functionId: string,
+  ) => Promise<void>;
 }
 
 export const useArchitectureStore =
   create<ArchitectureStore>((set) => ({
     activeView: "dependencies",
     layoutDirection: "LR",
+    layoutSeed: 0,
 
     graph: {
       nodes: [],
@@ -79,12 +98,19 @@ export const useArchitectureStore =
 
     impactResult: null,
 
+    fileImpactResult: null,
+
+    downstreamResult: null,
+
     loading: false,
     error: null,
     searchTerm: "",
     activeTypes: [],
 
     setLayoutDirection: (dir) => set({ layoutDirection: dir }),
+
+    requestLayoutReset: () =>
+      set((state) => ({ layoutSeed: state.layoutSeed + 1 })),
 
     setActiveView: (view) => {
       const defaultDir =
@@ -95,6 +121,8 @@ export const useArchitectureStore =
         activeView: view,
         selectedNode: null,
         impactResult: null,
+        fileImpactResult: null,
+        downstreamResult: null,
         layoutDirection: defaultDir,
       });
     },
@@ -117,6 +145,9 @@ export const useArchitectureStore =
     setSelectedNode: (node) => {
       set({
         selectedNode: node,
+        impactResult: null,
+        fileImpactResult: null,
+        downstreamResult: null,
       });
     },
 
@@ -260,6 +291,8 @@ export const useArchitectureStore =
 
         set({
           impactResult: impact,
+          fileImpactResult: null,
+          downstreamResult: null,
         });
       } catch (error) {
         set({
@@ -267,6 +300,50 @@ export const useArchitectureStore =
             error instanceof Error
               ? error.message
               : "Could not load impact analysis.",
+        });
+      }
+    },
+
+    loadFileImpact: async (workspaceId, filePath) => {
+      try {
+        const impact = await architectureApi.getFileImpact(
+          workspaceId,
+          filePath,
+        );
+
+        set({
+          fileImpactResult: impact,
+          impactResult: null,
+          downstreamResult: null,
+        });
+      } catch (error) {
+        set({
+          error:
+            error instanceof Error
+              ? error.message
+              : "Could not load file impact analysis.",
+        });
+      }
+    },
+
+    loadDownstreamImpact: async (workspaceId, functionId) => {
+      try {
+        const impact = await architectureApi.getDownstreamImpact(
+          workspaceId,
+          functionId,
+        );
+
+        set({
+          downstreamResult: impact,
+          impactResult: null,
+          fileImpactResult: null,
+        });
+      } catch (error) {
+        set({
+          error:
+            error instanceof Error
+              ? error.message
+              : "Could not load downstream impact.",
         });
       }
     },

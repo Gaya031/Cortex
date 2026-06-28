@@ -8,12 +8,13 @@ import {
   Loader2,
   Search,
 } from "lucide-react";
-import { useEffect, useMemo } from "react";
+import { useEffect, useMemo, useState } from "react";
 
 import CodeActionsPanel from "@/components/editor/CodeActionsPanel";
 import EditorSurface from "@/components/editor/EditorSurface";
 import FileExplorer from "@/components/editor/FileExplorer";
 import WorkspaceSidebar from "@/components/platform/WorkspaceSidebar";
+import { IndexStats, indexerApi } from "@/services/indexer.api";
 import { useEditorStore } from "@/store/useEditorStore";
 
 export default function WorkspaceShell({
@@ -53,9 +54,15 @@ export default function WorkspaceShell({
     refactorPlan,
   } = useEditorStore();
 
+  const [indexStats, setIndexStats] = useState<IndexStats | null>(null);
+
   useEffect(() => {
     loadFiles(workspaceId);
   }, [loadFiles, workspaceId]);
+
+  useEffect(() => {
+    indexerApi.getStats(workspaceId).then(setIndexStats).catch(() => null);
+  }, [workspaceId, files.length]);
 
   const stats = useMemo(() => {
     const languages = new Set(
@@ -105,7 +112,9 @@ export default function WorkspaceShell({
             </span>
             <span className="flex items-center gap-2">
               <Activity className="h-3.5 w-3.5 text-emerald-300" />
-              {stats.size}
+              {indexStats
+                ? `${indexStats.embeddingsReady}/${indexStats.embeddableChunks} embedded (${indexStats.embeddingCoverage}%)`
+                : stats.size}
             </span>
           </div>
         </header>

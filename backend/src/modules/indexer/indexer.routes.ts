@@ -28,4 +28,12 @@ router.post("/:workspaceId", async (req, res) => {
     return res.status(200).json({success: true, message: "Indexing started in background"});
 })
 
+router.get("/stats/:workspaceId", async (req, res) => {
+    const workspaceId = Array.isArray(req.params.workspaceId)
+      ? req.params.workspaceId[0]
+      : req.params.workspaceId;
+    const stats = await indexerService.getWorkspaceStats(workspaceId);
+    return res.status(200).json({ success: true, result: stats });
+});
+
 export default router;

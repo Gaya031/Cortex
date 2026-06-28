@@ -2,11 +2,14 @@
 
 import {
   ArrowRightLeft,
+  BookMarked,
   Bot,
   Camera,
   FileSearch,
+  GitBranch,
   Loader2,
   PenLine,
+  Play,
   RotateCcw,
   Send,
   Sparkles,
@@ -20,6 +23,9 @@ import {
   MovePreview,
 } from "@/services/astRefactor.api";
 import { assistantApi } from "@/services/assistant.api";
+import { changesetApi } from "@/services/changeset.api";
+import { decisionApi } from "@/services/decision.api";
+import FileDepsPanel from "@/components/editor/FileDepsPanel";
 import {
   snapshotApi,
   WorkspaceSnapshot,
@@ -42,7 +48,7 @@ export default function CodeActionsPanel({
   refactorPlan,
 }: CodeActionsPanelProps) {
   const [activeTool, setActiveTool] = useState<
-    "chat" | "actions" | "snapshots" | "diff" | "plan"
+    "chat" | "actions" | "snapshots" | "diff" | "plan" | "deps"
   >("chat");
   const [messages, setMessages] = useState<Array<{ role: string; content: string }>>([]);
   const [question, setQuestion] = useState("");
@@ -56,7 +62,7 @@ export default function CodeActionsPanel({
     null,
   );
   const [panelLoading, setPanelLoading] = useState<
-    "chat" | "preview" | "snapshot" | "restore" | null
+    "chat" | "preview" | "snapshot" | "restore" | "execute" | "decision" | null
   >(null);
   const [message, setMessage] = useState("");
   const [diffFiles, setDiffFiles] = useState<DiffFile[]>([]);
@@ -232,6 +238,71 @@ export default function CodeActionsPanel({
     }
   };
 
+  const executePlan = async () => {
+    if (!refactorPlan?.changeSet) return;
+
+    try {
+      setPanelLoading("execute");
+      setMessage("");
+      const result = await changesetApi.executePlan(
+        workspaceId,
+        refactorPlan.changeSet,
+      );
+
+      if (result.blocked) {
+        setMessage(result.reason ?? "Plan blocked due to high risk.");
+        return;
+      }
+
+      setMessage(
+        `Plan executed. ${result.operations?.length ?? 0} operation(s) applied. Reindex completed.`,
+      );
+      onComplete();
+    } catch {
+      setMessage("Could not execute refactor plan.");
+    } finally {
+      setPanelLoading(null);
+    }
+  };
+
+  const saveLastAnswerAsDecision = async () => {
+    const lastAssistant = [...messages]
+      .reverse()
+      .find((msg) => msg.role === "assistant");
+
+    if (!lastAssistant?.content.trim()) {
+      setMessage("Ask a question first, then save the answer as a decision.");
+      return;
+    }
+
+    const title =
+      question.trim().slice(0, 80) ||
+      `Decision from chat ${new Date().toLocaleDateString()}`;
+
+    try {
+      setPanelLoading("decision");
+      const result = await decisionApi.create({
+        workspaceId,
+        title,
+        reasoning: lastAssistant.content.slice(0, 4000),
+        tags: ["chat"],
+      });
+
+      if (result.conflict) {
+        setMessage(
+          `Conflict with existing decision: ${result.conflictingDecision?.title}`,
+        );
+        return;
+      }
+
+      setMessage("Saved last AI answer to Decision Memory.");
+    } catch {
+      setMessage("Could not save decision.");
+    } finally {
+      setPanelLoading(null);
+    }
+  };
+
   const renderChatAnswer = (text: string) => {
     if (!text) return null;
     const parts = text.split(/(```[\s\S]*?```)/g);
@@ -302,12 +373,13 @@ export default function CodeActionsPanel({
         </p>
       </div>
 
-      <div className="grid shrink-0 grid-cols-5 gap-1.5 border-b border-white/[0.06] bg-[#080d14]/40 p-2">
+      <div className="grid shrink-0 grid-cols-6 gap-1 border-b border-white/[0.06] bg-[#080d14]/40 p-2">
         {[
           ["chat", Bot, "Chat"],
           ["plan", Sparkles, "AI Plan"],
-          ["actions", PenLine, "AST Actions"],
-          ["snapshots", Camera, "Snapshots"],
+          ["deps", GitBranch, "Deps"],
+          ["actions", PenLine, "AST"],
+          ["snapshots", Camera, "Snaps"],
           ["diff", FileSearch, "Diff"],
         ].map(([key, Icon, label]) => (
           <button
@@ -363,7 +435,26 @@ export default function CodeActionsPanel({
                 </div>
               ))}
             </div>
+            {messages.some((m) => m.role === "assistant") && (
+              <button
+                type="button"
+                onClick={saveLastAnswerAsDecision}
+                disabled={panelLoading === "decision"}
+                className="flex h-9 w-full items-center justify-center gap-2 rounded-xl border border-cyan-400/25 bg-cyan-950/10 text-xs font-bold text-cyan-200 hover:bg-cyan-500/10 disabled:opacity-50"
+              >
+                {panelLoading === "decision" ? (
+                  <Loader2 className="h-3.5 w-3.5 animate-spin" />
+                ) : (
+                  <BookMarked className="h-3.5 w-3.5" />
+                )}
+                Save answer as decision
+              </button>
+            )}
           </div>
+        )}
+
+        {activeTool === "deps" && (
+          <FileDepsPanel workspaceId={workspaceId} activePath={activePath} />
         )}
 
         {activeTool === "plan" && (
@@ -378,6 +469,25 @@ export default function CodeActionsPanel({
                   <p className="text-xs leading-6 text-slate-300">
                     {refactorPlan.plan.summary}
                   </p>
+                  <button
+                    type="button"
+                    onClick={executePlan}
+                    disabled={
+                      panelLoading === "execute" ||
+                      !(
+                        refactorPlan.changeSet.moveFunctions.length ||
+                        refactorPlan.changeSet.renameFunctions.length
+                      )
+                    }
+                    className="mt-4 flex h-10 w-full items-center justify-center gap-2 rounded-xl bg-gradient-to-r from-emerald-400 to-cyan-300 text-xs font-bold text-slate-950 disabled:opacity-50"
+                  >
+                    {panelLoading === "execute" ? (
+                      <Loader2 className="h-4 w-4 animate-spin" />
+                    ) : (
+                      <Play className="h-4 w-4" />
+                    )}
+                    Execute full plan
+                  </button>
                 </div>
 
                 {refactorPlan.plan.actions.length > 0 && (

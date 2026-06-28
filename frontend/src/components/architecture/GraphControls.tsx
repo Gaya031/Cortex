@@ -6,6 +6,7 @@ import {
   CircleDot,
   FileCode2,
   FunctionSquare,
+  LayoutGrid,
   RotateCcw,
   ArrowRight,
   ArrowDown,
@@ -51,7 +52,8 @@ export default function GraphControls({
   onToggleType,
   onClear,
 }: GraphControlsProps) {
-  const { layoutDirection, setLayoutDirection } = useArchitectureStore();
+  const { layoutDirection, setLayoutDirection, requestLayoutReset } =
+    useArchitectureStore();
 
   return (
     <div className="flex items-center gap-1">
@@ -81,9 +83,18 @@ export default function GraphControls({
 
       <button
         type="button"
+        onClick={requestLayoutReset}
+        title="Reset auto layout"
+        className="ml-1 rounded-lg border border-white/[0.08] p-2 text-slate-500 transition hover:bg-white/[0.04] hover:text-cyan-200"
+      >
+        <LayoutGrid className="h-4 w-4" />
+      </button>
+
+      <button
+        type="button"
         onClick={onClear}
         title="Clear filters"
-        className="ml-1 rounded-lg border border-white/[0.08] p-2 text-slate-500 transition hover:bg-white/[0.04] hover:text-slate-200"
+        className="rounded-lg border border-white/[0.08] p-2 text-slate-500 transition hover:bg-white/[0.04] hover:text-slate-200"
       >
         <RotateCcw className="h-4 w-4" />
       </button>

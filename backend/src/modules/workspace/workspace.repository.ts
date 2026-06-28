@@ -12,6 +12,10 @@ export class WorkspaceRepository {
     return WorkspaceModel.findById(workspaceId);
   }
 
+  async findByIdWithSecrets(workspaceId: string) {
+    return WorkspaceModel.findById(workspaceId).select("+githubToken");
+  }
+
   async updateStatus(workspaceId: string, status: string) {
     return WorkspaceModel.findByIdAndUpdate(workspaceId, { status }, { new: true });
   }

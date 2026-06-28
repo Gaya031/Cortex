@@ -2,6 +2,8 @@ import { api } from "../../store/api";
 import {
   ArchitectureGraph,
   ArchitectureSummary,
+  DownstreamImpact,
+  FileImpact,
   FunctionImpact,
 } from "@/types/architecture.types";
 
@@ -39,9 +41,11 @@ function normalizeGraph(graph: ArchitectureGraph): ArchitectureGraph {
 export const architectureApi = {
   async getDependenciesGraph(
     workspaceId: string,
+    mode: "files" | "full" = "files",
   ): Promise<ArchitectureGraph> {
     const res = await api.get(
       `/graph/visual/${workspaceId}`,
+      { params: { mode } },
     );
     return normalizeGraph(res.data.result);
   },
@@ -152,6 +156,28 @@ export const architectureApi = {
       },
     );
 
+    return res.data.result;
+  },
+
+  async getFileImpact(
+    workspaceId: string,
+    filePath: string,
+  ): Promise<FileImpact> {
+    const res = await api.post("/architecture/impact", {
+      workspaceId,
+      filePath,
+    });
+    return res.data.result;
+  },
+
+  async getDownstreamImpact(
+    workspaceId: string,
+    functionId: string,
+  ): Promise<DownstreamImpact> {
+    const res = await api.post("/callgraph/downstream", {
+      workspaceId,
+      functionId,
+    });
     return res.data.result;
   },
 };

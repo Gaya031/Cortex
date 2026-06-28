@@ -8,6 +8,11 @@ import {
   GraphRelationType,
 } from "./graph.types.js";
 import { cache, cacheKeys } from "../../shared/redis/redis.js";
+import {
+  buildChunkNodeId,
+  getChunkQualifiedName,
+} from "../../shared/utils/chunk-node.util.js";
+import { normalizeFilePath, toFileNodeId } from "../../shared/utils/path.util.js";
 
 interface VisualGraphNode {
   id: string;
@@ -30,11 +35,77 @@ interface VisualGraph {
   edges: VisualGraphEdge[];
 }
 
+function chunkMatchesCall(chunk: Chunk, calledFunction: string): boolean {
+  const qualified = getChunkQualifiedName(chunk);
+  return (
+    chunk.name === calledFunction ||
+    qualified === calledFunction ||
+    qualified.endsWith(`.${calledFunction}`)
+  );
+}
+
+function inferRuntimeLayer(node: {
+  nodeId: string;
+  name: string;
+  filePath?: string;
+  type: string;
+}): string {
+  const text = `${node.nodeId} ${node.name} ${node.filePath ?? ""}`.toLowerCase();
+
+  if (text.includes("redis") || text.includes("cache")) return "CACHE";
+  if (
+    text.includes("repository") ||
+    text.includes("schema") ||
+    text.includes("model") ||
+    text.includes("database") ||
+    text.includes("mongodb") ||
+    text.includes("mongoose")
+  ) {
+    return "DATABASE";
+  }
+  if (text.includes("controller")) return "CONTROLLER";
+  if (text.includes("service")) return "SERVICE";
+  if (text.includes("route") || text.includes("router")) return "ROUTE";
+  if (
+    text.includes("/page") ||
+    text.includes("/pages/") ||
+    text.endsWith("page.tsx") ||
+    text.endsWith("page.jsx")
+  ) {
+    return "PAGE";
+  }
+  if (node.type === GraphNodeType.COMPONENT) return "COMPONENT";
+  if (node.type === GraphNodeType.METHOD) return "SERVICE";
+  if (node.type === GraphNodeType.CLASS) return "SERVICE";
+  if (node.type === GraphNodeType.FILE) return "FILE";
+  return node.type;
+}
+
+const ENTRY_FILE_PATTERNS = [
+  "src/app.tsx",
+  "src/app.ts",
+  "src/main.tsx",
+  "src/main.ts",
+  "src/index.tsx",
+  "src/index.ts",
+  "app/page.tsx",
+  "pages/_app.tsx",
+  "pages/index.tsx",
+];
+
+function isEntryFile(filePath: string): boolean {
+  const normalized = normalizeFilePath(filePath);
+  return ENTRY_FILE_PATTERNS.some(
+    (pattern) => normalized === pattern || normalized.endsWith(`/${pattern}`),
+  );
+}
+
 export class GraphService {
   private readonly graphRepository = new GraphRepository();
   private readonly chunkRepository = new ChunkRepository();
 
   buildGraph(workspaceId: string, filePath: string, chunks: Chunk[]) {
+    const normalizedPath = normalizeFilePath(filePath);
     const nodes: GraphNode[] = [];
     const edges: GraphEdge[] = [];
 
@@ -47,58 +118,41 @@ export class GraphService {
       relation: GraphRelationType,
     ) => {
       const key = `${source}:${target}:${relation}`;
-
-      if (uniqueEdges.has(key)) {
-        return;
-      }
-
+      if (uniqueEdges.has(key)) return;
       uniqueEdges.add(key);
-
-      edges.push({
-        workspaceId,
-        source,
-        target,
-        relation,
-      });
+      edges.push({ workspaceId, source, target, relation });
     };
 
-    const fileNodeId = `file:${filePath}`;
+    const fileNodeId = toFileNodeId(normalizedPath);
 
     nodes.push({
       workspaceId,
       nodeId: fileNodeId,
       type: GraphNodeType.FILE,
-      name: filePath,
-      filePath,
+      name: normalizedPath,
+      filePath: normalizedPath,
     });
-
     createdNodeIds.add(fileNodeId);
 
-    /*
-      ------------------------------------------------
-      PASS 1
-      Create all nodes first
-      ------------------------------------------------
-    */
-
     for (const chunk of chunks) {
-      const chunkNodeId = `${chunk.filePath}:${chunk.type}:${chunk.name}`;
-
+      const chunkNodeId = buildChunkNodeId(chunk);
       let nodeType: GraphNodeType;
 
       switch (chunk.type) {
         case ChunkType.COMPONENT:
           nodeType = GraphNodeType.COMPONENT;
           break;
-
         case ChunkType.CLASS:
           nodeType = GraphNodeType.CLASS;
           break;
-
         case ChunkType.METHOD:
           nodeType = GraphNodeType.METHOD;
           break;
-
+        case ChunkType.INTERFACE:
+        case ChunkType.TYPE:
+        case ChunkType.MODULE:
+          nodeType = GraphNodeType.FUNCTION;
+          break;
         default:
           nodeType = GraphNodeType.FUNCTION;
       }
@@ -108,160 +162,99 @@ export class GraphService {
           workspaceId,
           nodeId: chunkNodeId,
           type: nodeType,
-          name: chunk.name,
+          name: getChunkQualifiedName(chunk),
           filePath: chunk.filePath,
         });
-
         createdNodeIds.add(chunkNodeId);
       }
     }
 
-    /*
-      ------------------------------------------------
-      PASS 2
-      Create CONTAINS + IMPORT edges
-      ------------------------------------------------
-    */
+    const fileResolvedImports = [
+      ...new Set(chunks.flatMap((chunk) => chunk.resolvedImports ?? [])),
+    ];
 
     for (const chunk of chunks) {
-      const chunkNodeId = `${chunk.filePath}:${chunk.type}:${chunk.name}`;
-
+      const chunkNodeId = buildChunkNodeId(chunk);
       addEdge(fileNodeId, chunkNodeId, GraphRelationType.CONTAINS);
-
-      /*
-        FILE -> FILE imports
-      */
-      for (const resolvedImport of chunk.resolvedImports ?? []) {
-        const targetFileNodeId = `file:${resolvedImport}`;
-
-        if (!createdNodeIds.has(targetFileNodeId)) {
-          nodes.push({
-            workspaceId,
-            nodeId: targetFileNodeId,
-            type: GraphNodeType.FILE,
-            name: resolvedImport,
-            filePath: resolvedImport,
-          });
-
-          createdNodeIds.add(targetFileNodeId);
-        }
-
-        addEdge(
-          fileNodeId,
-          targetFileNodeId,
-          GraphRelationType.FILE_IMPORTS_FILE,
-        );
-      }
-
-      /*
-        FILE -> External Module imports
-      */
-      for (const importPath of chunk.imports ?? []) {
-        if (importPath.startsWith(".")) {
-          continue;
-        }
-
-        const externalNodeId = `external:${importPath}`;
-
-        if (!createdNodeIds.has(externalNodeId)) {
-          nodes.push({
-            workspaceId,
-            nodeId: externalNodeId,
-            type: GraphNodeType.EXTERNAL_MODULE,
-            name: importPath,
-            filePath: importPath,
-          });
-
-          createdNodeIds.add(externalNodeId);
-        }
-
-        addEdge(fileNodeId, externalNodeId, GraphRelationType.IMPORTS);
-      }
     }
 
-    /*
-      ------------------------------------------------
-      PASS 3
-      Build Function Lookup
-      ------------------------------------------------
-    */
+    for (const resolvedImport of fileResolvedImports) {
+      const targetFileNodeId = toFileNodeId(resolvedImport);
 
-    const functionLookup = new Map<string, string[]>();
-
-    for (const chunk of chunks) {
-      const nodeId = `${chunk.filePath}:${chunk.type}:${chunk.name}`;
-
-      if (!functionLookup.has(chunk.name)) {
-        functionLookup.set(chunk.name, []);
+      if (!createdNodeIds.has(targetFileNodeId)) {
+        nodes.push({
+          workspaceId,
+          nodeId: targetFileNodeId,
+          type: GraphNodeType.FILE,
+          name: resolvedImport,
+          filePath: resolvedImport,
+        });
+        createdNodeIds.add(targetFileNodeId);
       }
 
-      functionLookup.get(chunk.name)!.push(nodeId);
+      addEdge(
+        fileNodeId,
+        targetFileNodeId,
+        GraphRelationType.FILE_IMPORTS_FILE,
+      );
     }
 
-    /*
-      ------------------------------------------------
-      PASS 4
-      Create CALLS edges
-      ------------------------------------------------
-    */
+    const allImports = [
+      ...new Set(chunks.flatMap((chunk) => chunk.imports ?? [])),
+    ];
+
+    for (const importPath of allImports) {
+      if (importPath.startsWith(".")) continue;
+
+      const externalNodeId = `external:${importPath}`;
+      if (!createdNodeIds.has(externalNodeId)) {
+        nodes.push({
+          workspaceId,
+          nodeId: externalNodeId,
+          type: GraphNodeType.EXTERNAL_MODULE,
+          name: importPath,
+          filePath: importPath,
+        });
+        createdNodeIds.add(externalNodeId);
+      }
+      addEdge(fileNodeId, externalNodeId, GraphRelationType.IMPORTS);
+    }
 
     for (const chunk of chunks) {
-      const sourceId = `${chunk.filePath}:${chunk.type}:${chunk.name}`;
+      const sourceId = buildChunkNodeId(chunk);
 
       for (const calledFunction of chunk.calls ?? []) {
         const targets = chunks.filter(
-          (c) => c.name === calledFunction && c.filePath !== chunk.filePath,
+          (candidate) =>
+            candidate.filePath === chunk.filePath &&
+            chunkMatchesCall(candidate, calledFunction) &&
+            buildChunkNodeId(candidate) !== sourceId,
         );
+
         for (const targetChunk of targets) {
-          const targetNodeId = `${targetChunk.filePath}:${targetChunk.type}:${targetChunk.name}`;
-          addEdge(sourceId, targetNodeId, GraphRelationType.CALLS);
+          addEdge(sourceId, buildChunkNodeId(targetChunk), GraphRelationType.CALLS);
         }
-
-        // if (!targets) {
-        //   continue;
-        // }
-
-        // for (const targetId of targets) {
-        //   if (sourceId === targetId) {
-        //     continue;
-        //   }
-
-        //   addEdge(sourceId, targetId, GraphRelationType.CALLS);
       }
     }
 
-    return {
-      nodes,
-      edges,
-    };
+    return { nodes, edges };
   }
 
-  async getVisualizationGraph(workspaceId: string) {
-    const key = cacheKeys.graph(workspaceId, "dependency");
+  async getVisualizationGraph(workspaceId: string, mode: "full" | "files" = "files") {
+    const key = cacheKeys.graph(workspaceId, mode === "files" ? "dependency-files" : "dependency");
     const cached = await cache.getJson<VisualGraph>(key);
-
-    if (cached) {
-      return cached;
-    }
+    if (cached) return cached;
 
     const [nodes, edges] = await Promise.all([
       this.graphRepository.findNodesByWorkspace(workspaceId),
       this.graphRepository.findEdgesByWorkspace(workspaceId),
     ]);
 
-    const uniqueEdges = new Set<string>();
-
-    const deduplicatedEdges = edges.filter((edge) => {
-      const key = `${edge.source}-${edge.target}-${edge.relation}`;
-
-      if (uniqueEdges.has(key)) {
-        return false;
-      }
-
-      uniqueEdges.add(key);
-
-      return true;
-    });
+    if (mode === "files") {
+      const result = this.buildFileLevelGraph(nodes, edges);
+      await cache.setJson(key, result, 60 * 15);
+      return result;
+    }
 
     const dependencyRelations = new Set<string>([
       GraphRelationType.CONTAINS,
@@ -269,25 +262,34 @@ export class GraphService {
       GraphRelationType.FILE_IMPORTS_FILE,
     ]);
 
-    const dependencyEdges = deduplicatedEdges.filter((edge) =>
-      dependencyRelations.has(edge.relation),
-    );
+    const dependencyNodeTypes = new Set<string>([
+      GraphNodeType.FILE,
+      GraphNodeType.FUNCTION,
+      GraphNodeType.COMPONENT,
+      GraphNodeType.CLASS,
+      GraphNodeType.METHOD,
+      GraphNodeType.EXTERNAL_MODULE,
+    ]);
 
-    const dependencyNodeIds = new Set<string>();
-    dependencyEdges.forEach((edge) => {
-      dependencyNodeIds.add(edge.source);
-      dependencyNodeIds.add(edge.target);
+    const uniqueEdges = new Set<string>();
+    const dependencyEdges = edges.filter((edge) => {
+      if (!dependencyRelations.has(edge.relation)) return false;
+      const edgeKey = `${edge.source}-${edge.target}-${edge.relation}`;
+      if (uniqueEdges.has(edgeKey)) return false;
+      uniqueEdges.add(edgeKey);
+      return true;
     });
 
     const result: VisualGraph = {
-      nodes: nodes.map((node) => ({
-        id: node.nodeId,
-        type: node.type,
-        label: node.name,
-        filePath: node.filePath ?? "",
-        graphLayer: "DEPENDENCY",
-      })).filter((node) => dependencyNodeIds.has(node.id)),
-
+      nodes: nodes
+        .filter((node) => dependencyNodeTypes.has(node.type))
+        .map((node) => ({
+          id: node.nodeId,
+          type: node.type,
+          label: node.name,
+          filePath: node.filePath ?? "",
+          graphLayer: "DEPENDENCY",
+        })),
       edges: dependencyEdges.map((edge) => ({
         id: `${edge.source}-${edge.target}-${edge.relation}`,
         source: edge.source,
@@ -298,61 +300,156 @@ export class GraphService {
     };
 
     await cache.setJson(key, result, 60 * 15);
-
     return result;
+  }
+
+  private buildFileLevelGraph(
+    nodes: Array<{ nodeId: string; type: string; name: string; filePath?: string | null }>,
+    edges: Array<{ source: string; target: string; relation: string }>,
+  ): VisualGraph {
+    const fileNodeIds = new Set(
+      nodes
+        .filter((node) => node.type === GraphNodeType.FILE)
+        .map((node) => node.nodeId),
+    );
+
+    const externalNodeIds = new Set(
+      nodes
+        .filter((node) => node.type === GraphNodeType.EXTERNAL_MODULE)
+        .map((node) => node.nodeId),
+    );
+
+    const allowedIds = new Set([...fileNodeIds, ...externalNodeIds]);
+    const uniqueEdges = new Set<string>();
+
+    const dependencyEdges = edges.filter((edge) => {
+      if (
+        edge.relation !== GraphRelationType.FILE_IMPORTS_FILE &&
+        edge.relation !== GraphRelationType.IMPORTS
+      ) {
+        return false;
+      }
+      if (!allowedIds.has(edge.source) || !allowedIds.has(edge.target)) {
+        return false;
+      }
+      const edgeKey = `${edge.source}-${edge.target}-${edge.relation}`;
+      if (uniqueEdges.has(edgeKey)) return false;
+      uniqueEdges.add(edgeKey);
+      return true;
+    });
+
+    return {
+      nodes: nodes
+        .filter(
+          (node) =>
+            node.type === GraphNodeType.FILE ||
+            node.type === GraphNodeType.EXTERNAL_MODULE,
+        )
+        .map((node) => ({
+          id: node.nodeId,
+          type: node.type,
+          label: node.type === GraphNodeType.FILE
+            ? (node.filePath ?? node.name).split("/").pop() ?? node.name
+            : node.name,
+          filePath: node.filePath ?? "",
+          graphLayer: "DEPENDENCY",
+        })),
+      edges: dependencyEdges.map((edge) => ({
+        id: `${edge.source}-${edge.target}-${edge.relation}`,
+        source: edge.source,
+        target: edge.target,
+        relation: edge.relation,
+        graphLayer: "DEPENDENCY",
+      })),
+    };
   }
 
   async getExecutionFlowGraph(workspaceId: string) {
     const key = cacheKeys.graph(workspaceId, "projectflow");
     const cached = await cache.getJson<VisualGraph>(key);
+    if (cached) return cached;
 
-    if (cached) {
-      return cached;
-    }
-
-    const [allNodes, allEdges] = await Promise.all([
+    const [allNodes, callEdges, importEdges, containsEdges] = await Promise.all([
       this.graphRepository.findNodesByWorkspace(workspaceId),
-      this.graphRepository.findEdgesByWorkspace(workspaceId),
+      this.graphRepository.getCallEdges(workspaceId),
+      this.graphRepository.getFileImportEdges(workspaceId),
+      this.graphRepository.getContainsEdges(workspaceId),
     ]);
 
-    const normalizeRuntimeType = (node: any) => {
-      const text = `${node.nodeId} ${node.name} ${node.filePath}`.toLowerCase();
-
-      if (text.includes("route")) return "ROUTE";
-      if (text.includes("controller")) return "CONTROLLER";
-      if (text.includes("service")) return "SERVICE";
-      if (text.includes("repository")) return "REPOSITORY";
-      if (text.includes("model")) return "DATABASE";
-      if (text.includes("database") || text.includes("mongodb")) return "DATABASE";
-      if (text.includes("redis") || text.includes("cache")) return "CACHE";
-      if (text.includes("page") || text.includes("screen")) return "PAGE";
-      if (node.type === GraphNodeType.COMPONENT) return "COMPONENT";
-      if (node.type === GraphNodeType.FILE) return "FILE";
-
-      return node.type;
-    };
+    const includedTypes = new Set([
+      GraphNodeType.FILE,
+      GraphNodeType.FUNCTION,
+      GraphNodeType.COMPONENT,
+      GraphNodeType.CLASS,
+      GraphNodeType.METHOD,
+    ]);
 
     const runtimeNodes = allNodes
-      .filter((node) =>
-        [
-          GraphNodeType.FILE,
-          GraphNodeType.FUNCTION,
-          GraphNodeType.COMPONENT,
-          GraphNodeType.CLASS,
-          GraphNodeType.METHOD,
-        ].includes(node.type as GraphNodeType),
-      )
+      .filter((node) => includedTypes.has(node.type as GraphNodeType))
       .map((node) => ({
         id: node.nodeId,
         label: node.name,
-        type: normalizeRuntimeType(node),
+        type: inferRuntimeLayer({
+          nodeId: node.nodeId,
+          name: node.name,
+          filePath: node.filePath ?? undefined,
+          type: node.type,
+        }),
         filePath: node.filePath ?? "",
         graphLayer: "EXECUTION",
       }));
 
+    const nodeLayerMap = new Map(
+      runtimeNodes.map((node) => [node.id, node.type]),
+    );
+
+    const flowEdges: VisualGraphEdge[] = [];
+    const addedEdges = new Set<string>();
+
+    const addFlowEdge = (
+      source: string,
+      target: string,
+      relation: string = GraphRelationType.FLOW,
+    ) => {
+      if (!source || !target || source === target) return;
+      const key = `${source}->${target}:${relation}`;
+      if (addedEdges.has(key)) return;
+      addedEdges.add(key);
+      flowEdges.push({
+        id: `${source}-${target}-${relation}`,
+        source,
+        target,
+        relation,
+        graphLayer: "EXECUTION",
+      });
+    };
+
+    for (const edge of callEdges) {
+      addFlowEdge(edge.source, edge.target, GraphRelationType.CALLS);
+    }
+
+    for (const edge of importEdges) {
+      const sourceLayer = nodeLayerMap.get(edge.source);
+      const targetLayer = nodeLayerMap.get(edge.target);
+      if (!sourceLayer || !targetLayer) continue;
+      if (sourceLayer !== targetLayer) {
+        addFlowEdge(edge.source, edge.target, "IMPORT_FLOW");
+      }
+    }
+
+    for (const edge of containsEdges) {
+      if (!edge.source.startsWith("file:")) continue;
+      addFlowEdge(edge.source, edge.target, GraphRelationType.CONTAINS);
+    }
+
+    const incomingCalls = new Map<string, number>();
+    for (const edge of callEdges) {
+      incomingCalls.set(edge.target, (incomingCalls.get(edge.target) ?? 0) + 1);
+    }
+
     const browserNode: VisualGraphNode = {
       id: "browser",
-      label: "Browser",
+      label: "Browser / Client",
       type: "ENTRY",
       filePath: "",
       graphLayer: "EXECUTION",
@@ -361,286 +458,160 @@ export class GraphService {
     const responseNode: VisualGraphNode = {
       id: "response",
       label: "Response",
-      type: "ENTRY",
+      type: "EXIT",
       filePath: "",
       graphLayer: "EXECUTION",
     };
 
-    // Helper to find common semantic feature keywords (e.g. auth, user, order, etc.)
-    const isFeatureMatch = (nodeA: any, nodeB: any) => {
-      const nameA = `${nodeA.id} ${nodeA.label} ${nodeA.filePath}`.toLowerCase();
-      const nameB = `${nodeB.id} ${nodeB.label} ${nodeB.filePath}`.toLowerCase();
+    for (const node of runtimeNodes) {
+      const isFrontendEntry =
+        node.type === "PAGE" ||
+        node.type === "COMPONENT" ||
+        isEntryFile(node.filePath) ||
+        (incomingCalls.get(node.id) ?? 0) === 0;
 
-      const keywords = [
-        "user", "order", "login", "auth", "dashboard", 
-        "workspace", "indexer", "api", "project", "chat", 
-        "assistant", "insight", "file", "chunk", "parser"
-      ];
-      for (const keyword of keywords) {
-        if (nameA.includes(keyword) && nameB.includes(keyword)) {
-          return true;
-        }
-      }
-      return false;
-    };
-
-    // Cache database call connections for lookup
-    const callTargets = new Map<string, string[]>();
-    allEdges.forEach((edge) => {
-      if (edge.relation === GraphRelationType.CALLS) {
-        if (!callTargets.has(edge.source)) {
-          callTargets.set(edge.source, []);
-        }
-        callTargets.get(edge.source)!.push(edge.target);
-      }
-    });
-
-    const flowEdges: VisualGraphEdge[] = [];
-    const addedEdges = new Set<string>();
-
-    const safeAddEdge = (source: string, target: string, relationName = "FLOW") => {
-      const key = `${source}->${target}`;
-      if (source === target || addedEdges.has(key)) return;
-      addedEdges.add(key);
-      flowEdges.push({
-        id: `${source}-${target}-FLOW`,
-        source,
-        target,
-        relation: relationName,
-        graphLayer: "EXECUTION",
-      });
-    };
-
-    // 1. Group nodes by runtime layers
-    const pages = runtimeNodes.filter(
-      (n) => n.type === "PAGE" || n.label.toLowerCase().includes("page"),
-    );
-    const components = runtimeNodes.filter(
-      (n) => n.type === "COMPONENT" && !pages.includes(n),
-    );
-    const routes = runtimeNodes.filter(
-      (n) => n.type === "ROUTE" || n.label.toLowerCase().includes("route"),
-    );
-    const controllers = runtimeNodes.filter(
-      (n) => n.type === "CONTROLLER" || n.label.toLowerCase().includes("controller"),
-    );
-    const services = runtimeNodes.filter(
-      (n) => n.type === "SERVICE" || n.label.toLowerCase().includes("service"),
-    );
-    const databases = runtimeNodes.filter(
-      (n) =>
-        n.type === "DATABASE" ||
-        n.type === "REPOSITORY" ||
-        n.label.toLowerCase().includes("database") ||
-        n.label.toLowerCase().includes("repository") ||
-        n.label.toLowerCase().includes("model"),
-    );
-    const caches = runtimeNodes.filter((n) => n.type === "CACHE");
-
-    const otherNodes = runtimeNodes.filter(
-      (n) =>
-        !pages.includes(n) &&
-        !components.includes(n) &&
-        !routes.includes(n) &&
-        !controllers.includes(n) &&
-        !services.includes(n) &&
-        !databases.includes(n) &&
-        !caches.includes(n),
-    );
-
-    // 2. Connect Browser to Page nodes
-    if (pages.length > 0) {
-      pages.forEach((p) => safeAddEdge("browser", p.id));
-    } else {
-      // Fallback: connect browser to top components/other nodes
-      components.slice(0, 4).forEach((c) => safeAddEdge("browser", c.id));
-      otherNodes.slice(0, 4).forEach((o) => safeAddEdge("browser", o.id));
-    }
-
-    // 3. Connect Pages to Components (and other related functions)
-    pages.forEach((p) => {
-      let connected = false;
-      const targets = callTargets.get(p.id) || [];
-      targets.forEach((t) => {
-        if (components.some((c) => c.id === t) || otherNodes.some((o) => o.id === t)) {
-          safeAddEdge(p.id, t);
-          connected = true;
-        }
-      });
-
-      // Semantic/feature fallback connection
-      if (!connected) {
-        components.concat(otherNodes).forEach((c) => {
-          if (isFeatureMatch(p, c)) {
-            safeAddEdge(p.id, c.id);
-            connected = true;
-          }
-        });
-      }
-    });
-
-    // 4. Connect Components/Frontend Functions to Backend Routes
-    components.concat(otherNodes).forEach((c) => {
-      let connected = false;
-      const targets = callTargets.get(c.id) || [];
-      targets.forEach((t) => {
-        if (routes.some((r) => r.id === t)) {
-          safeAddEdge(c.id, t);
-          connected = true;
-        }
-      });
-
-      // Semantic/feature fallback connection
-      if (!connected) {
-        routes.forEach((r) => {
-          if (isFeatureMatch(c, r)) {
-            safeAddEdge(c.id, r.id);
-            connected = true;
-          }
-        });
-      }
-    });
-
-    // 5. Connect Routes to Controllers
-    routes.forEach((r) => {
-      let connected = false;
-      const targets = callTargets.get(r.id) || [];
-      targets.forEach((t) => {
-        if (controllers.some((ctrl) => ctrl.id === t)) {
-          safeAddEdge(r.id, t);
-          connected = true;
-        }
-      });
-
-      if (!connected) {
-        controllers.forEach((ctrl) => {
-          if (isFeatureMatch(r, ctrl)) {
-            safeAddEdge(r.id, ctrl.id);
-            connected = true;
-          }
-        });
-      }
-    });
-
-    // 6. Connect Controllers to Services
-    controllers.forEach((ctrl) => {
-      let connected = false;
-      const targets = callTargets.get(ctrl.id) || [];
-      targets.forEach((t) => {
-        if (services.some((s) => s.id === t)) {
-          safeAddEdge(ctrl.id, t);
-          connected = true;
-        }
-      });
-
-      if (!connected) {
-        services.forEach((s) => {
-          if (isFeatureMatch(ctrl, s)) {
-            safeAddEdge(ctrl.id, s.id);
-            connected = true;
-          }
-        });
-      }
-    });
-
-    // 7. Connect Services to Databases/Caches
-    services.forEach((s) => {
-      let connected = false;
-      const targets = callTargets.get(s.id) || [];
-      targets.forEach((t) => {
-        if (databases.some((d) => d.id === t) || caches.some((ca) => ca.id === t)) {
-          safeAddEdge(s.id, t);
-          connected = true;
-        }
-      });
-
-      if (!connected) {
-        databases.concat(caches).forEach((d) => {
-          if (isFeatureMatch(s, d)) {
-            safeAddEdge(s.id, d.id);
-            connected = true;
-          }
-        });
-      }
-    });
-
-    // 8. Connect Databases/Caches to Response
-    let responseConnected = false;
-    databases.concat(caches).forEach((d) => {
-      safeAddEdge(d.id, "response");
-      responseConnected = true;
-    });
-
-    if (!responseConnected) {
-      // Connect services directly to response if no databases exist
-      services.forEach((s) => {
-        safeAddEdge(s.id, "response");
-        responseConnected = true;
-      });
-      
-      if (!responseConnected) {
-        // Fallback: connect routes directly to response
-        routes.forEach((r) => {
-          safeAddEdge(r.id, "response");
-          responseConnected = true;
-        });
+      if (isFrontendEntry && ["PAGE", "COMPONENT", "ROUTE", "FILE"].includes(node.type)) {
+        addFlowEdge("browser", node.id, GraphRelationType.FLOW);
       }
     }
 
-    // 9. Response back to Browser (closed loop)
-    if (responseConnected) {
-      safeAddEdge("response", "browser");
+    for (const node of runtimeNodes) {
+      if (["DATABASE", "CACHE"].includes(node.type)) {
+        addFlowEdge(node.id, "response", GraphRelationType.FLOW);
+        continue;
+      }
+
+      const hasOutgoingCall = callEdges.some((edge) => edge.source === node.id);
+      if (
+        !hasOutgoingCall &&
+        ["SERVICE", "CONTROLLER", "REPOSITORY", "ROUTE"].includes(node.type)
+      ) {
+        addFlowEdge(node.id, "response", GraphRelationType.FLOW);
+      }
     }
 
-    // 10. Filter nodes to only include connected ones
-    const usedNodeIds = new Set<string>(["browser"]);
-    if (responseConnected) {
-      usedNodeIds.add("response");
-    }
-
-    flowEdges.forEach((edge) => {
-      usedNodeIds.add(edge.source);
-      usedNodeIds.add(edge.target);
-    });
-
-    const connectedNodes = [
-      browserNode,
-      ...(responseConnected ? [responseNode] : []),
-      ...runtimeNodes.filter(
-        (n) =>
-          usedNodeIds.has(n.id) &&
-          n.id !== "browser" &&
-          n.id !== "response",
-      ),
-    ];
+    addFlowEdge("response", "browser", GraphRelationType.FLOW);
 
     const result: VisualGraph = {
-      nodes: connectedNodes,
+      nodes: [browserNode, ...runtimeNodes, responseNode],
       edges: flowEdges,
     };
 
     await cache.setJson(key, result, 60 * 15);
-
     return result;
+  }
+
+  private resolveCallTargets(
+    caller: Chunk,
+    calledFunction: string,
+    chunksByFile: Map<string, Chunk[]>,
+    exportMap: Map<string, Set<string>>,
+  ): string[] {
+    const targets: string[] = [];
+    const sourceId = buildChunkNodeId(caller);
+
+    const sameFileChunks = chunksByFile.get(caller.filePath) ?? [];
+    for (const candidate of sameFileChunks) {
+      if (
+        chunkMatchesCall(candidate, calledFunction) &&
+        buildChunkNodeId(candidate) !== sourceId
+      ) {
+        targets.push(buildChunkNodeId(candidate));
+      }
+    }
+    if (targets.length > 0) {
+      return [...new Set(targets)];
+    }
+
+    for (const binding of caller.importBindings ?? []) {
+      if (binding.localName !== calledFunction) continue;
+
+      const targetFile = binding.resolvedFilePath
+        ? normalizeFilePath(binding.resolvedFilePath)
+        : null;
+      if (!targetFile) continue;
+
+      const fileChunks = chunksByFile.get(targetFile) ?? [];
+      for (const candidate of fileChunks) {
+        if (binding.importedName === "default") {
+          if (
+            (candidate.exports ?? []).includes("default") ||
+            (candidate.exports ?? []).includes(candidate.name)
+          ) {
+            targets.push(buildChunkNodeId(candidate));
+          }
+        } else if (binding.importedName === "*") {
+          if (chunkMatchesCall(candidate, calledFunction)) {
+            targets.push(buildChunkNodeId(candidate));
+          }
+        } else if (
+          candidate.name === binding.importedName ||
+          chunkMatchesCall(candidate, binding.importedName)
+        ) {
+          targets.push(buildChunkNodeId(candidate));
+        }
+      }
+    }
+    if (targets.length > 0) {
+      return [...new Set(targets)];
+    }
+
+    for (const importedFile of caller.resolvedImports ?? []) {
+      const normalizedImport = normalizeFilePath(importedFile);
+      const fileChunks = chunksByFile.get(normalizedImport) ?? [];
+      const exportedNames = exportMap.get(normalizedImport) ?? new Set<string>();
+
+      for (const candidate of fileChunks) {
+        if (
+          (exportedNames.has(candidate.name) ||
+            exportedNames.has(getChunkQualifiedName(candidate))) &&
+          chunkMatchesCall(candidate, calledFunction)
+        ) {
+          targets.push(buildChunkNodeId(candidate));
+        }
+      }
+    }
+
+    return [...new Set(targets)];
   }
 
   async buildCallEdges(workspaceId: string) {
     const chunks = await this.chunkRepository.findByWorkspace(workspaceId);
     const edges: GraphEdge[] = [];
-    const functionLookup = new Map<string, string[]>();
-    for (const chunk of chunks) {
-      const nodeId = `${chunk.filePath}:${chunk.type}:${chunk.name}`;
-      if (!functionLookup.has(chunk.name)) {
-        functionLookup.set(chunk.name, []);
-      }
-      functionLookup.get(chunk.name)!.push(nodeId);
-    }
     const uniqueEdges = new Set<string>();
+
+    const chunksByFile = new Map<string, Chunk[]>();
+    const exportMap = new Map<string, Set<string>>();
+
     for (const chunk of chunks) {
-      const sourceId = `${chunk.filePath}:${chunk.type}:${chunk.name}`;
+      if (!chunksByFile.has(chunk.filePath)) {
+        chunksByFile.set(chunk.filePath, []);
+      }
+      chunksByFile.get(chunk.filePath)!.push(chunk);
+
+      const normalizedPath = normalizeFilePath(chunk.filePath);
+      if (!exportMap.has(normalizedPath)) {
+        exportMap.set(normalizedPath, new Set(chunk.exports ?? []));
+      } else {
+        for (const name of chunk.exports ?? []) {
+          exportMap.get(normalizedPath)!.add(name);
+        }
+      }
+    }
+
+    const calledByMap = new Map<string, Set<string>>();
+
+    for (const chunk of chunks) {
+      const sourceId = buildChunkNodeId(chunk);
+
       for (const calledFunction of chunk.calls ?? []) {
-        const targets = functionLookup.get(calledFunction);
-        if (!targets) continue;
+        const targets = this.resolveCallTargets(
+          chunk,
+          calledFunction,
+          chunksByFile,
+          exportMap,
+        );
+
         for (const targetId of targets) {
           if (targetId === sourceId) continue;
           const key = `${sourceId}:${targetId}:CALLS`;
@@ -652,15 +623,41 @@ export class GraphService {
             target: targetId,
             relation: GraphRelationType.CALLS,
           });
+
+          if (!calledByMap.has(targetId)) {
+            calledByMap.set(targetId, new Set());
+          }
+          calledByMap.get(targetId)!.add(sourceId);
         }
       }
     }
+
     if (edges.length > 0) {
       await this.graphRepository.createEdges(edges);
     }
-    return {
-      edges: edges,
-      length: edges.length,
-    };
+
+    await this.populateChunkRelationships(chunks, calledByMap);
+
+    return { edges, length: edges.length };
+  }
+
+  private async populateChunkRelationships(
+    chunks: Chunk[],
+    calledByMap: Map<string, Set<string>>,
+  ) {
+    const workspaceId = chunks[0]?.workspaceId;
+    if (!workspaceId) return;
+
+    await this.chunkRepository.bulkUpdateRelationships(
+      workspaceId,
+      chunks.map((chunk) => ({
+        filePath: chunk.filePath,
+        name: chunk.name,
+        type: chunk.type,
+        parentChunk: chunk.parentChunk,
+        dependencies: (chunk.resolvedImports ?? []).map(normalizeFilePath),
+        calledBy: [...(calledByMap.get(buildChunkNodeId(chunk)) ?? [])],
+      })),
+    );
   }
 }

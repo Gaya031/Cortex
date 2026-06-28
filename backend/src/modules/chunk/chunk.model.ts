@@ -39,12 +39,22 @@ const chunkSchema = new Schema(
       type: [String],
       default: [],
     },
-
     exports: {
       type: [String],
       default: [],
     },
-
+    resolvedImports: {
+      type: [String],
+      default: [],
+    },
+    importBindings: [
+      {
+        localName: { type: String, required: true },
+        importedName: { type: String, required: true },
+        modulePath: { type: String, required: true },
+        resolvedFilePath: { type: String, default: null },
+      },
+    ],
     dependencies: {
       type: [String],
       default: [],

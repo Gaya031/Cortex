@@ -35,7 +35,7 @@ export class ExplainerController {
 
   async explainProjectWithAI(req: Request, res: Response) {
     const { workspaceId } = req.body;
-    const result = this.ExplainerService.explainProjectWithAI(workspaceId);
-    return res.status(200).json({ result });
+    const result = await this.ExplainerService.explainProjectWithAI(workspaceId);
+    return res.status(200).json({ success: true, result });
   }
 }

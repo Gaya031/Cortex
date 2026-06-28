@@ -19,4 +19,17 @@ export class CallGraphController {
     );
     res.status(200).json({ success: true, result });
   }
+
+  async getDownstreamImpact(req: Request, res: Response) {
+    const { workspaceId, functionId } = req.body;
+    const nodeId = await this.callgraphService.resolveNodeIdPublic(
+      workspaceId,
+      functionId,
+    );
+    const result = await this.callgraphService.getDownStreamImpace(
+      workspaceId,
+      nodeId,
+    );
+    res.status(200).json({ success: true, result });
+  }
 }

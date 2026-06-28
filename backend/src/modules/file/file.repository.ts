@@ -19,9 +19,37 @@ export class FileRepository {
   }
 
   async findByWorkspace(workspaceId: string) {
-    return FileModel.find({
-      workspaceId: new mongoose.Types.ObjectId(workspaceId),
-    });
+    return FileModel.find(
+      {
+        workspaceId: new mongoose.Types.ObjectId(workspaceId),
+      },
+      {
+        path: 1,
+        extension: 1,
+        language: 1,
+        hash: 1,
+        size: 1,
+        workspaceId: 1,
+        createdAt: 1,
+        updatedAt: 1,
+      },
+    );
+  }
+
+  async updateContent(workspaceId: string, filePath: string, content: string) {
+    return FileModel.findOneAndUpdate(
+      {
+        workspaceId: new mongoose.Types.ObjectId(workspaceId),
+        path: filePath,
+      },
+      {
+        $set: {
+          content,
+          size: Buffer.byteLength(content, "utf8"),
+        },
+      },
+      { new: true, upsert: true },
+    );
   }
 
   async findByPath(workspaceId: string, path: string) {

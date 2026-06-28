@@ -1,15 +1,12 @@
 import { Request, Response } from "express";
 import { FileService } from "./file.service.js";
-import { WorkspaceRepository } from "../workspace/workspace.repository.js";
-import { FilesystemService } from "../../shared/filesystem/filesystem.service.js";
 import { IndexerService } from "../indexer/indexer.service.js";
-import path from "path";
 import { invalidateWorkspaceCache } from "../../shared/redis/redis.js";
+import { WorkspaceContentService } from "../../shared/workspace-content/workspace-content.service.js";
 
 const fileService = new FileService();
-const workspaceRepository = new WorkspaceRepository();
-const filesystemService = new FilesystemService();
 const indexerService = new IndexerService();
+const contentService = new WorkspaceContentService();
 
 export class FileController {
   async create(req: Request, res: Response) {
@@ -43,18 +40,11 @@ export class FileController {
         });
       }
 
-      const workspace = await workspaceRepository.findById(workspaceId as string);
-      if (!workspace) {
-        return res.status(404).json({ success: false, message: "Workspace not found" });
-      }
+      const content = await contentService.readFile(
+        workspaceId as string,
+        filePath as string,
+      );
 
-      const absolutePath = path.join(workspace.localPath, filePath as string);
-      const exists = await filesystemService.exists(absolutePath);
-      if (!exists) {
-        return res.status(404).json({ success: false, message: "File not found on disk" });
-      }
-
-      const content = await filesystemService.readFile(absolutePath);
       return res.status(200).json({
         success: true,
         data: { content, filePath },
@@ -78,27 +68,21 @@ export class FileController {
         });
       }
 
-      const workspace = await workspaceRepository.findById(workspaceId);
-      if (!workspace) {
-        return res.status(404).json({ success: false, message: "Workspace not found" });
-      }
-
-      const absolutePath = path.join(workspace.localPath, filePath);
-      await filesystemService.writeFile(absolutePath, content);
+      await contentService.writeFile(
+        workspaceId,
+        filePath,
+        content,
+        `Update ${filePath} via Cortex Code`,
+      );
       await invalidateWorkspaceCache(workspaceId);
 
-      // Trigger re-indexing of workspace
-      let indexResult = null;
-      try {
-        indexResult = await indexerService.indexWorkspace(workspaceId);
-      } catch (idxError) {
+      indexerService.indexWorkspace(workspaceId).catch((idxError) => {
         console.error("Error re-indexing after save:", idxError);
-      }
+      });
 
       return res.status(200).json({
         success: true,
-        message: "File saved successfully",
-        data: indexResult,
+        message: "File saved successfully. Re-indexing started in background.",
       });
     } catch (error) {
       console.error("Error saving file:", error);

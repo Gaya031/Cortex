@@ -1,31 +1,30 @@
-import path from "path";
 import { FilesystemService } from "../../shared/filesystem/filesystem.service.js";
+import { WorkspaceContentService } from "../../shared/workspace-content/workspace-content.service.js";
 import { WorkspaceRepository } from "../workspace/workspace.repository.js";
-import { SnapshotRepository } from "./snapshot.repository.js";
 import { IndexerService } from "../indexer/indexer.service.js";
-import { file } from "@babel/types";
+import { SnapshotRepository } from "./snapshot.repository.js";
 import { invalidateWorkspaceCache } from "../../shared/redis/redis.js";
 
 export class SnapshotService {
   private readonly workspaceRepository = new WorkspaceRepository();
   private readonly fileSystemService = new FilesystemService();
+  private readonly contentService = new WorkspaceContentService();
   private readonly snapshotRepository = new SnapshotRepository();
   private readonly indexerService = new IndexerService();
 
   async createSnapshot(workspaceId: string, filePaths: string[]) {
-    const workspace = await this.workspaceRepository.findById(workspaceId);
-    if (!workspace) throw new Error("Workspace not found");
-
     const files = [];
 
     for (const filePath of filePaths) {
-      const absolutePath = path.join(workspace.localPath, filePath);
-      const exists = await this.fileSystemService.exists(absolutePath);
-      if (!exists) continue;
-
-      const content = await this.fileSystemService.readFile(absolutePath);
-
-      files.push({ filePath, content });
+      try {
+        const content = await this.contentService.readFile(
+          workspaceId,
+          filePath,
+        );
+        files.push({ filePath, content });
+      } catch {
+        continue;
+      }
     }
 
     return this.snapshotRepository.create({ workspaceId, files });
@@ -42,16 +41,15 @@ export class SnapshotService {
 
     if (!workspace) throw new Error("Workspace not found");
 
-    if (!workspace.localPath) {
-      throw new Error("Workspace localPath not configured");
-    }
-
     for (const file of snapshot.files) {
       if (!file.filePath || file.content == null) {
         continue;
       }
-      const absolutePath = path.join(workspace.localPath, file.filePath);
-      await this.fileSystemService.writeFile(absolutePath, file.content);
+      await this.contentService.writeFile(
+        snapshot.workspaceId.toString(),
+        file.filePath,
+        file.content,
+      );
     }
 
     const reindex = await this.indexerService.indexWorkspace(
@@ -66,17 +64,19 @@ export class SnapshotService {
   }
 
   async createWorkspaceSnapshot(workspaceId: string) {
-    const workspace = await this.workspaceRepository.findById(workspaceId);
-    if (!workspace) throw new Error("workspace not found");
-
-    const files = await this.fileSystemService.getAllFiles(workspace.localPath);
+    const paths = await this.contentService.listSourceFilePaths(workspaceId);
     const snapshotFiles = [];
-    for (const filePath of files) {
-      const content = await this.fileSystemService.readFile(filePath);
-      snapshotFiles.push({
-        filePath: path.relative(workspace.localPath, filePath),
-        content,
-      });
+
+    for (const filePath of paths) {
+      try {
+        const content = await this.contentService.readFile(
+          workspaceId,
+          filePath,
+        );
+        snapshotFiles.push({ filePath, content });
+      } catch {
+        continue;
+      }
     }
 
     return this.snapshotRepository.create({

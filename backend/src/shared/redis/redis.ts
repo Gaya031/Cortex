@@ -107,7 +107,7 @@ export const cacheKeys = {
   queryEmbedding(queryHash: string) {
     return `embedding:query:${queryHash}`;
   },
-  graph(workspaceId: string, type: "dependency" | "callgraph" | "projectflow") {
+  graph(workspaceId: string, type: "dependency" | "dependency-files" | "callgraph" | "projectflow") {
     return `graph:${type}:${workspaceId}`;
   },
 };

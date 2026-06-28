@@ -8,5 +8,6 @@ const controller = new CallGraphController();
 router.get("/:workspaceId", controller.getGraph.bind(controller));
 
 router.post("/impact", controller.getFunctionImpact.bind(controller));
+router.post("/downstream", controller.getDownstreamImpact.bind(controller));
 
 export default router;

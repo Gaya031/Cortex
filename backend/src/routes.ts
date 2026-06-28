@@ -31,16 +31,17 @@ import { verifyToken } from "./middlewares/auth.middleware.js";
 import flowExplainRoutes from "./modules/flow-explainer/flow-explainer.routes.js";
 import validationRoutes from "./modules/validation/validation.routes.js";
 import refactorReviewRoutes from "./modules/refactor-review/refactor-review.routes.js";
+import githubRoutes from "./modules/github/github.routes.js";
 
 const router = Router();
 
 router.use("/auth", authRoutes);
 router.use("/workspaces", verifyToken, workspaceRoutes);
-router.use("/parser", parserRoutes);
-router.use("/chunks", chunkRoutes);
-router.use("/graph", graphRoutes);
-router.use("/file", fileRoutes);
-router.use("/indexer", indexerRoutes);
+router.use("/parser", verifyToken, parserRoutes);
+router.use("/chunks", verifyToken, chunkRoutes);
+router.use("/graph", verifyToken, graphRoutes);
+router.use("/file", verifyToken, fileRoutes);
+router.use("/indexer", verifyToken, indexerRoutes);
 router.use("/resolver", verifyToken, resolverRoutes);
 router.use("/architecture", verifyToken, architectureRoutes);
 router.use("/explainer", verifyToken, explainerRoutes);
@@ -53,18 +54,17 @@ router.use("/refactor", verifyToken, refactorRoutes);
 router.use("/transformation", verifyToken, transformationRoutes);
 router.use("/callgraph", verifyToken, callgraphRoutes);
 router.use("/refactor-plan", verifyToken, refactorPlanRoutes);
-router.use("/changeset", changesetRoutes);
-router.use("/ast-refactor", astRefactorRoutes);
-router.use("/changeset-executor", changeSetExecutorRoutes);
-router.use("/diff-preview", diffPreviewRoutes);
-router.use("/snapshot", snapshotRoutes);
-router.use("/embedding", embeddingRoutes);
-router.use("/ai", aiRoutes);
-router.use("/repository", repositoryRoutes);
-router.use("/flow-explain", flowExplainRoutes);
-router.use("/validation", validationRoutes);
-router.use("/refactor-review", refactorReviewRoutes);
+router.use("/changeset", verifyToken, changesetRoutes);
+router.use("/ast-refactor", verifyToken, astRefactorRoutes);
+router.use("/changeset-executor", verifyToken, changeSetExecutorRoutes);
+router.use("/diff-preview", verifyToken, diffPreviewRoutes);
+router.use("/snapshot", verifyToken, snapshotRoutes);
+router.use("/embedding", verifyToken, embeddingRoutes);
+router.use("/ai", verifyToken, aiRoutes);
+router.use("/repository", verifyToken, repositoryRoutes);
+router.use("/flow-explain", verifyToken, flowExplainRoutes);
+router.use("/validation", verifyToken, validationRoutes);
+router.use("/refactor-review", verifyToken, refactorReviewRoutes);
+router.use("/github", githubRoutes);
 
 export default router;
-
-// 6a1f4d5367280e07749d431a

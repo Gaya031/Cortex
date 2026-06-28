@@ -1,4 +1,38 @@
 import { GraphRepository } from "../graph/graph.repository.js";
+import {
+  fromFileNodeId,
+  normalizeFilePath,
+  toFileNodeId,
+} from "../../shared/utils/path.util.js";
+import { GraphRelationType } from "../graph/graph.types.js";
+
+const ENTRY_FILE_PATTERNS = [
+  "src/index.ts",
+  "src/main.ts",
+  "src/main.tsx",
+  "src/app.ts",
+  "src/app.tsx",
+  "app/page.tsx",
+  "app/layout.tsx",
+  "pages/_app.tsx",
+  "pages/index.tsx",
+  "index.ts",
+  "index.tsx",
+  "main.ts",
+  "main.tsx",
+];
+
+function isEntryFile(filePath: string): boolean {
+  const normalized = normalizeFilePath(filePath);
+  return ENTRY_FILE_PATTERNS.some(
+    (pattern) =>
+      normalized === pattern ||
+      normalized.endsWith(`/${pattern}`) ||
+      normalized.endsWith("/page.tsx") ||
+      normalized.endsWith("/page.ts") ||
+      normalized.endsWith("/layout.tsx"),
+  );
+}
 
 export class ArchitectureService {
   private readonly graphRepository = new GraphRepository();
@@ -14,35 +48,36 @@ export class ArchitectureService {
     return [...counts.entries()]
       .sort((a, b) => b[1] - a[1])
       .map(([file, count]) => ({
-        file: file.replace("file:", ""),
+        file: fromFileNodeId(file),
         importCount: count,
       }));
   }
 
   async getOrphanFiles(workspaceId: string) {
     const files = await this.graphRepository.getFileNodes(workspaceId);
-
     const importEdges = await this.graphRepository.getFileImportEdges(workspaceId);
+    const externalEdges = await this.graphRepository.getExternalImportEdges(workspaceId);
 
     const incomingTargets = new Set(importEdges.map((edge) => edge.target));
-
     const outgoingSources = new Set(importEdges.map((edge) => edge.source));
-    const ENTRY_FILES = [
-      "src/index.ts",
-      "src/main.ts",
-      "src/main.tsx",
-      "src/app.ts",
-      "src/app.tsx",
-    ]
+    const externalSources = new Set(externalEdges.map((edge) => edge.source));
+
     return files
       .filter((file) => {
-        if(file.filePath && ENTRY_FILES.includes(file.filePath))return false;
+        const filePath = normalizeFilePath(
+          file.filePath ?? fromFileNodeId(file.nodeId),
+        );
+        if (isEntryFile(filePath)) return false;
+
         const hasIncoming = incomingTargets.has(file.nodeId);
-        const hasOutgoing = outgoingSources.has(file.nodeId);
+        const hasOutgoing =
+          outgoingSources.has(file.nodeId) || externalSources.has(file.nodeId);
         return !hasIncoming && !hasOutgoing;
       })
       .map((file) => ({
-        file: file.filePath ?? file.name.replace("file: ", ""),
+        file: normalizeFilePath(
+          file.filePath ?? fromFileNodeId(file.nodeId),
+        ),
       }));
   }
 
@@ -57,7 +92,7 @@ export class ArchitectureService {
     return [...counts.entries()]
       .sort((a, b) => b[1] - a[1])
       .map(([file, score]) => ({
-        file: file.replace("file:", ""),
+        file: fromFileNodeId(file),
         couplingScore: score,
       }))
       .filter((file) => file.couplingScore >= 3);
@@ -76,9 +111,7 @@ export class ArchitectureService {
     }
 
     const visited = new Set<string>();
-
     const recursionStack = new Set<string>();
-
     const cycles: string[][] = [];
 
     const dfs = (node: string, path: string[]) => {
@@ -116,7 +149,7 @@ export class ArchitectureService {
     }
 
     return Array.from(uniqueCycles.values()).map((cycle) => ({
-      cycle: cycle.map((file) => file.replace("file:", "")),
+      cycle: cycle.map((file) => fromFileNodeId(file)),
     }));
   }
 
@@ -152,23 +185,25 @@ export class ArchitectureService {
     };
   }
 
-  async getImpactAnalysis(workspacId: string, filePath: string){
-    const importEdges = await this.graphRepository.getFileImportEdges(workspacId);
+  async getImpactAnalysis(workspaceId: string, filePath: string) {
+    const normalizedPath = normalizeFilePath(filePath);
+    const importEdges = await this.graphRepository.getFileImportEdges(workspaceId);
     const reverseGraph = new Map<string, string[]>();
 
-    for(const edge of importEdges){
-      if(!reverseGraph.has(edge.target)){
+    for (const edge of importEdges) {
+      if (!reverseGraph.has(edge.target)) {
         reverseGraph.set(edge.target, []);
       }
       reverseGraph.get(edge.target)!.push(edge.source);
     }
+
     const visited = new Set<string>();
     const affectedFiles = new Set<string>();
 
     const dfs = (node: string) => {
       const dependents = reverseGraph.get(node) ?? [];
-      for(const dependent of dependents){
-        if(visited.has(dependent)){
+      for (const dependent of dependents) {
+        if (visited.has(dependent)) {
           continue;
         }
         visited.add(dependent);
@@ -176,13 +211,15 @@ export class ArchitectureService {
         dfs(dependent);
       }
     };
-    const startNode = `file:${filePath}`;
-    dfs(startNode);
+
+    dfs(toFileNodeId(normalizedPath));
+
     return {
-      file: filePath,
+      file: normalizedPath,
       impactScore: affectedFiles.size,
-      affectedFiles: Array.from(affectedFiles).map((file) => file.replace("file:", ""))
-    }
-  };
-  
+      affectedFiles: Array.from(affectedFiles).map((file) =>
+        fromFileNodeId(file),
+      ),
+    };
+  }
 }

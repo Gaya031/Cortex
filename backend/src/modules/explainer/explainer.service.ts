@@ -30,15 +30,23 @@ export class ExplainerService {
       filePath,
     );
 
+    const externalDependencies =
+      await this.graphQueryService.getExternalDependencies(
+        workspaceId,
+        filePath,
+      );
+
     return {
       file: filePath,
       chunks: chunks.map((chunk) => ({ name: chunk.name, type: chunk.type })),
       dependencies,
       dependents,
+      externalDependencies,
       metrics: {
         chunkCount: chunks.length,
         dependcyCount: dependencies.length,
         dependentCount: dependents.length,
+        externalDependencyCount: externalDependencies.length,
       },
     };
   }

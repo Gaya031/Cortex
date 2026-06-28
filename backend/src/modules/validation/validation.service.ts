@@ -14,6 +14,7 @@ import {
 
 import { Chunk, ChunkType } from "../chunk/chunk.types.js";
 import { CallgraphService } from "../callgraph/callgraph.service.js";
+import { buildChunkNodeId } from "../../shared/utils/chunk-node.util.js";
 
 export class ValidationService {
   private readonly chunkRepository = new ChunkRepository();
@@ -60,7 +61,7 @@ export class ValidationService {
 
     if (oldFunction) {
       try {
-        const functionId = `${oldFunction.filePath}:${oldFunction.name}`;
+        const functionId = buildChunkNodeId(oldFunction);
 
         const impact = await this.callgraphService.getFunctionImpact(
           workspaceId,
@@ -150,7 +151,7 @@ export class ValidationService {
 
     if (functionChunk) {
       try {
-        const functionId = `${functionChunk.filePath}:${functionChunk.name}`;
+        const functionId = buildChunkNodeId(functionChunk);
 
         const impact = await this.callgraphService.getFunctionImpact(
           workspaceId,

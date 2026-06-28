@@ -17,6 +17,30 @@ interface NodeDetailsPanelProps {
   workspaceId: string;
 }
 
+const CALLABLE_TYPES = new Set([
+  "FUNCTION",
+  "METHOD",
+  "COMPONENT",
+  "CLASS",
+]);
+
+function resolveNodeFilePath(node: {
+  id: string;
+  filePath?: string;
+  type: string;
+}): string | null {
+  if (node.filePath) return node.filePath;
+  if (node.id.startsWith("file:")) {
+    return node.id.replace(/^file:/, "");
+  }
+  if (node.type === "FILE") {
+    return node.id.replace(/^file:/, "");
+  }
+  const parts = node.id.split(":");
+  if (parts.length >= 3) return parts[0];
+  return null;
+}
+
 export default function NodeDetailsPanel({
   workspaceId,
 }: NodeDetailsPanelProps) {
@@ -24,8 +48,12 @@ export default function NodeDetailsPanel({
     selectedNode,
     graph,
     impactResult,
+    fileImpactResult,
+    downstreamResult,
     loading,
     loadImpact,
+    loadFileImpact,
+    loadDownstreamImpact,
   } = useArchitectureStore();
 
   if (!selectedNode) {
@@ -54,6 +82,12 @@ export default function NodeDetailsPanel({
     (degree >= 10 ? 92 : degree >= 5 ? 63 : degree >= 2 ? 34 : 12);
   const riskLabel =
     risk >= 70 ? "High" : risk >= 40 ? "Medium" : "Low";
+  const isCallable = CALLABLE_TYPES.has(selectedNode.type);
+  const resolvedFilePath = resolveNodeFilePath(selectedNode);
+  const isFile =
+    selectedNode.type === "FILE" ||
+    selectedNode.id.startsWith("file:") ||
+    Boolean(resolvedFilePath);
 
   return (
     <div className="w-[340px] min-w-[340px] shrink-0 overflow-y-auto border-l border-white/[0.06] bg-[#05080c]">
@@ -135,28 +169,63 @@ export default function NodeDetailsPanel({
           </p>
         </div>
 
-        {selectedNode.type === "FUNCTION" && (
-          <button
-            type="button"
-            onClick={() =>
-              loadImpact(workspaceId, selectedNode.id)
-            }
-            className="flex h-10 w-full items-center justify-center gap-2 rounded-xl bg-gradient-to-r from-cyan-400 to-cyan-300 text-xs font-bold text-slate-950 shadow-[0_2px_12px_rgba(34,211,238,0.15)] hover:from-cyan-300 hover:to-cyan-200 transition-all duration-300 active:scale-95 cursor-pointer"
-          >
-            {loading ? (
-              <Loader2 className="h-4 w-4 animate-spin" />
-            ) : (
-              <Sparkles className="h-4 w-4" />
-            )}
-            Analyze impact
-          </button>
-        )}
+        <div className="space-y-2">
+          {isCallable && (
+            <>
+              <button
+                type="button"
+                onClick={() =>
+                  loadImpact(workspaceId, selectedNode.id)
+                }
+                className="flex h-10 w-full items-center justify-center gap-2 rounded-xl bg-gradient-to-r from-cyan-400 to-cyan-300 text-xs font-bold text-slate-950 shadow-[0_2px_12px_rgba(34,211,238,0.15)] hover:from-cyan-300 hover:to-cyan-200 transition-all duration-300 active:scale-95 cursor-pointer"
+              >
+                {loading ? (
+                  <Loader2 className="h-4 w-4 animate-spin" />
+                ) : (
+                  <Sparkles className="h-4 w-4" />
+                )}
+                Upstream impact
+              </button>
+              <button
+                type="button"
+                onClick={() =>
+                  loadDownstreamImpact(workspaceId, selectedNode.id)
+                }
+                className="flex h-10 w-full items-center justify-center gap-2 rounded-xl border border-cyan-400/30 bg-cyan-950/10 text-xs font-bold text-cyan-200 hover:bg-cyan-500/10 transition-all duration-300 active:scale-95 cursor-pointer"
+              >
+                {loading ? (
+                  <Loader2 className="h-4 w-4 animate-spin" />
+                ) : (
+                  <ArrowDownRight className="h-4 w-4" />
+                )}
+                Downstream impact
+              </button>
+            </>
+          )}
+
+          {isFile && resolvedFilePath && (
+            <button
+              type="button"
+              onClick={() =>
+                loadFileImpact(workspaceId, resolvedFilePath)
+              }
+              className="flex h-10 w-full items-center justify-center gap-2 rounded-xl border border-amber-400/30 bg-amber-950/10 text-xs font-bold text-amber-200 hover:bg-amber-500/10 transition-all duration-300 active:scale-95 cursor-pointer"
+            >
+              {loading ? (
+                <Loader2 className="h-4 w-4 animate-spin" />
+              ) : (
+                <FileCode2 className="h-4 w-4" />
+              )}
+              File import impact
+            </button>
+          )}
+        </div>
 
         {impactResult && (
           <div className="rounded-xl border border-cyan-400/20 bg-cyan-950/10 p-4 shadow-lg">
             <p className="mb-3 flex items-center gap-2 text-xs font-bold text-cyan-300 uppercase tracking-wider">
               <AlertTriangle className="h-4 w-4" />
-              Impact score {impactResult.impactScore}
+              Upstream impact {impactResult.impactScore}
             </p>
             <div className="space-y-1.5 max-h-48 overflow-y-auto pr-1">
               {impactResult.affectedFunctions?.length ? (
@@ -171,6 +240,56 @@ export default function NodeDetailsPanel({
               ) : (
                 <p className="text-xs text-slate-500">
                   No affected functions returned.
+                </p>
+              )}
+            </div>
+          </div>
+        )}
+
+        {downstreamResult && (
+          <div className="rounded-xl border border-indigo-400/20 bg-indigo-950/10 p-4 shadow-lg">
+            <p className="mb-3 flex items-center gap-2 text-xs font-bold text-indigo-300 uppercase tracking-wider">
+              <ArrowDownRight className="h-4 w-4" />
+              Downstream impact {downstreamResult.downStreamImpactScore}
+            </p>
+            <div className="space-y-1.5 max-h-48 overflow-y-auto pr-1">
+              {downstreamResult.affectedFunctions?.length ? (
+                downstreamResult.affectedFunctions.map((item) => (
+                  <p
+                    key={item}
+                    className="rounded-lg bg-black/30 border border-white/[0.04] px-2.5 py-1.5 text-[10px] font-mono text-slate-350 truncate"
+                  >
+                    {item}
+                  </p>
+                ))
+              ) : (
+                <p className="text-xs text-slate-500">
+                  No downstream functions affected.
+                </p>
+              )}
+            </div>
+          </div>
+        )}
+
+        {fileImpactResult && (
+          <div className="rounded-xl border border-amber-400/20 bg-amber-950/10 p-4 shadow-lg">
+            <p className="mb-3 flex items-center gap-2 text-xs font-bold text-amber-300 uppercase tracking-wider">
+              <FileCode2 className="h-4 w-4" />
+              File impact {fileImpactResult.impactScore}
+            </p>
+            <div className="space-y-1.5 max-h-48 overflow-y-auto pr-1">
+              {fileImpactResult.affectedFiles?.length ? (
+                fileImpactResult.affectedFiles.map((item) => (
+                  <p
+                    key={item}
+                    className="rounded-lg bg-black/30 border border-white/[0.04] px-2.5 py-1.5 text-[10px] font-mono text-slate-350 truncate"
+                  >
+                    {item}
+                  </p>
+                ))
+              ) : (
+                <p className="text-xs text-slate-500">
+                  No dependent files affected.
                 </p>
               )}
             </div>

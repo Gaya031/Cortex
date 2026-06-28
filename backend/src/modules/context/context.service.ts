@@ -7,7 +7,6 @@ import { RepositoryContext } from "./context.types.js";
 export class ContextService {
   private readonly architectureService = new ArchitectureService();
   private readonly decisionService = new DecisionService();
-  // private readonly intelligenceService = new IntelligenceService();
   private readonly embeddingService = new EmbeddingService();
 
   async buildProjectContext(workspaceId: string) {
@@ -26,35 +25,34 @@ export class ContextService {
     };
   }
 
-  // async buildQuestionContext(
-  //   workspaceId: string,
-  //   query: string,
-  // ): Promise<RepositoryContext> {
-  //   const chunks = (
-  //     await this.embeddingService.search(workspaceId, query, 10)
-  //   ).filter((chunk) => chunk.score > 0.45).slice(0, 5);
-  //   const context = chunks
-  //     .map((chunk) => `File: ${chunk.filePath} ${chunk.content}`)
-  //     .join("\n-------------------\n");
-  //   return { query, context, chunks };
-  // }
-
   async buildQuestionContext(
     workspaceId: string,
     query: string,
   ): Promise<RepositoryContext> {
-    const [chunks, architecture] = await Promise.all([
-      this.embeddingService.search(workspaceId, query, 10),
+    const [chunks, architecture, decisions] = await Promise.all([
+      this.embeddingService.search(workspaceId, query, 15),
       this.architectureService.getArchitectureSummary(workspaceId),
+      this.decisionService.getWorkspaceDecisions(workspaceId),
     ]);
 
     const filteredChunks = chunks
-      .filter((chunk) => chunk.score > 0.45)
-      .slice(0, 5);
+      .filter((chunk) => chunk.score > 0.35)
+      .slice(0, 10);
+
+    const decisionContext = decisions
+      .slice(0, 8)
+      .map(
+        (d: { title: string; reasoning: string; tags?: string[] }) =>
+          `- ${d.title}: ${d.reasoning}${d.tags?.length ? ` [${d.tags.join(", ")}]` : ""}`,
+      )
+      .join("\n");
 
     const context = `
 Architecture:
 ${JSON.stringify(architecture)}
+
+Recorded Decisions:
+${decisionContext || "None recorded yet."}
 
 Repository Chunks:
 ${filteredChunks

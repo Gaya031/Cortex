@@ -1,5 +1,9 @@
 import { GraphRepository } from "../graph/graph.repository.js";
 import { cache, cacheKeys } from "../../shared/redis/redis.js";
+import { resolveFunctionNodeId, buildChunkNodeId, getChunkQualifiedName } from "../../shared/utils/chunk-node.util.js";
+import { ChunkRepository } from "../chunk/chunk.repository.js";
+import { ChunkType } from "../chunk/chunk.types.js";
+import { GraphNodeType } from "../graph/graph.types.js";
 
 interface CallGraphNode {
   id: string;
@@ -27,6 +31,19 @@ interface CallGraph {
 
 export class CallgraphService {
   private readonly graphRepository = new GraphRepository();
+  private readonly chunkRepository = new ChunkRepository();
+
+  private async resolveNodeId(workspaceId: string, functionId: string) {
+    if (functionId.split(":").length >= 3) {
+      return functionId;
+    }
+    const chunks = await this.chunkRepository.findByWorkspace(workspaceId);
+    return resolveFunctionNodeId(functionId, chunks);
+  }
+
+  async resolveNodeIdPublic(workspaceId: string, functionId: string) {
+    return this.resolveNodeId(workspaceId, functionId);
+  }
 
   private buildReverseGraph(edges: { from: string; to: string }[]) {
     const reverseGraph = new Map<string, string[]>();
@@ -175,17 +192,61 @@ export class CallgraphService {
       return cached;
     }
 
-    const [nodes, callEdges] = await Promise.all([
+    const [graphNodes, callEdges, chunks] = await Promise.all([
       this.graphRepository.getFunctionNodes(workspaceId),
       this.graphRepository.getCallEdges(workspaceId),
+      this.chunkRepository.findByWorkspace(workspaceId),
     ]);
 
+    const callableTypes = new Set([
+      ChunkType.FUNCTION,
+      ChunkType.COMPONENT,
+      ChunkType.METHOD,
+    ]);
+
+    const nodeMap = new Map<
+      string,
+      {
+        nodeId: string;
+        name: string;
+        filePath: string;
+        type: string;
+      }
+    >();
+
+    for (const node of graphNodes) {
+      nodeMap.set(node.nodeId, {
+        nodeId: node.nodeId,
+        name: node.name,
+        filePath: node.filePath ?? "",
+        type: node.type,
+      });
+    }
+
+    for (const chunk of chunks) {
+      if (!callableTypes.has(chunk.type)) continue;
+      const nodeId = buildChunkNodeId(chunk);
+      if (!nodeMap.has(nodeId)) {
+        nodeMap.set(nodeId, {
+          nodeId,
+          name: getChunkQualifiedName(chunk),
+          filePath: chunk.filePath,
+          type:
+            chunk.type === ChunkType.COMPONENT
+              ? GraphNodeType.COMPONENT
+              : chunk.type === ChunkType.METHOD
+                ? GraphNodeType.METHOD
+                : GraphNodeType.FUNCTION,
+        });
+      }
+    }
+
     const result: CallGraph = {
-      nodes: nodes.map((node) => ({
+      nodes: [...nodeMap.values()].map((node) => ({
         id: node.nodeId,
         label: node.name,
         name: node.name,
-        filePath: node.filePath ?? "",
+        filePath: node.filePath,
         type: node.type,
         graphLayer: "CALL",
       })),
@@ -206,8 +267,11 @@ export class CallgraphService {
   }
 
   async getFunctionImpact(workspaceId: string, functionId: string) {
-    const graph = await this.buildCallGraph(workspaceId);
-    const reverseGraph = this.buildReverseGraph(graph.edges);
+    const nodeId = await this.resolveNodeId(workspaceId, functionId);
+    const callEdges = await this.graphRepository.getCallEdges(workspaceId);
+    const reverseGraph = this.buildReverseGraph(
+      callEdges.map((edge) => ({ from: edge.source, to: edge.target })),
+    );
     const visited = new Set<string>();
     const affected = new Set<string>();
 
@@ -222,10 +286,10 @@ export class CallgraphService {
         dfs(caller);
       }
     };
-    dfs(functionId);
+    dfs(nodeId);
 
     return {
-      function: functionId,
+      function: nodeId,
       impactScore: affected.size,
       affectedFunctions: Array.from(affected),
     };
@@ -253,15 +317,17 @@ export class CallgraphService {
   }
 
   async getDownStreamImpace(workspaceId: string, functionId: string) {
-    const graph = await this.buildCallGraph(workspaceId);
+    const nodeId = await this.resolveNodeId(workspaceId, functionId);
+    const callEdges = await this.graphRepository.getCallEdges(workspaceId);
     const forwardGraph = new Map<string, string[]>();
 
-    for (const edge of graph.edges) {
-      if (!forwardGraph.has(edge.from)) {
-        forwardGraph.set(edge.from, []);
+    for (const edge of callEdges) {
+      if (!forwardGraph.has(edge.source)) {
+        forwardGraph.set(edge.source, []);
       }
-      forwardGraph.get(edge.from)!.push(edge.to);
+      forwardGraph.get(edge.source)!.push(edge.target);
     }
+
     const visited = new Set<string>();
     const affected = new Set<string>();
 
@@ -275,9 +341,9 @@ export class CallgraphService {
         dfs(child);
       }
     };
-    dfs(functionId);
+    dfs(nodeId);
     return {
-      function: functionId,
+      function: nodeId,
       downStreamImpactScore: affected.size,
       affectedFunctions: Array.from(affected),
     };

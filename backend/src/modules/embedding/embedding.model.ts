@@ -31,4 +31,7 @@ const embeddingSchema = new Schema ({
     },
 }, {timestamps: true});
 
+embeddingSchema.index({ workspaceId: 1, chunkId: 1 }, { unique: true });
+embeddingSchema.index({ contentHash: 1 });
+
 export const EmbeddingModel = model("embedding", embeddingSchema);

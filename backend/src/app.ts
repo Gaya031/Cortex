@@ -3,6 +3,7 @@ import cors from 'cors';
 import helmet from 'helmet';
 import morgan from 'morgan';
 import routes from "./routes.js";
+import { env } from "./config/env.js";
 
 const app = express();
 
@@ -11,9 +12,22 @@ app.use(helmet());
 app.use(morgan("dev"));
 app.use(express.json());
 
+const allowedOrigins = new Set([
+  env.frontendUrl,
+  
+  "http://localhost:3000",
+  "http://localhost:3001",
+]);
+
 app.use(
   cors({
-    origin: "https://cortex-code.vercel.app",
+    origin(origin, callback) {
+      if (!origin || allowedOrigins.has(origin)) {
+        callback(null, true);
+        return;
+      }
+      callback(null, false);
+    },
     credentials: true,
   }),
 );

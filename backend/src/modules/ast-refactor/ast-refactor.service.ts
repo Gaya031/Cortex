@@ -5,8 +5,7 @@ import * as t from "@babel/types";
 import type { NodePath } from "@babel/traverse";
 import path from "path";
 
-import { WorkspaceRepository } from "../workspace/workspace.repository.js";
-import { FilesystemService } from "../../shared/filesystem/filesystem.service.js";
+import { WorkspaceContentService } from "../../shared/workspace-content/workspace-content.service.js";
 
 interface MoveFunctionResult {
   sourceBefore: string;
@@ -16,8 +15,7 @@ interface MoveFunctionResult {
 }
 
 export class AstRefactorService {
-  private readonly workspaceRepository = new WorkspaceRepository();
-  private readonly filesystemService = new FilesystemService();
+  private readonly contentService = new WorkspaceContentService();
 
   private buildImportPath(sourceFile: string, targetFile: string) {
     const relative = path.relative(path.dirname(sourceFile), targetFile);
@@ -48,17 +46,10 @@ export class AstRefactorService {
     sourceFile: string,
     targetFile: string,
   ): Promise<MoveFunctionResult> {
-    const workspace = await this.workspaceRepository.findById(workspaceId);
-
-    if (!workspace) {
-      throw new Error("Workspace not found");
-    }
-
-    const sourcePath = path.join(workspace.localPath, sourceFile);
-
-    const targetPath = path.join(workspace.localPath, targetFile);
-
-    const sourceBefore = await this.filesystemService.readFile(sourcePath);
+    const sourceBefore = await this.contentService.readFile(
+      workspaceId,
+      sourceFile,
+    );
 
     const sourceAst = parse(sourceBefore, {
       sourceType: "module",
@@ -104,19 +95,19 @@ export class AstRefactorService {
       retainLines: true,
     }).code;
 
-    const targetExists = await this.filesystemService.exists(targetPath);
-
     let targetBefore = "";
     let targetAst: t.File;
 
-    if (targetExists) {
-      targetBefore = await this.filesystemService.readFile(targetPath);
-
+    try {
+      targetBefore = await this.contentService.readFile(
+        workspaceId,
+        targetFile,
+      );
       targetAst = parse(targetBefore, {
         sourceType: "module",
         plugins: ["typescript", "jsx"],
       });
-    } else {
+    } catch {
       targetAst = t.file(t.program([]));
     }
 
@@ -135,12 +126,9 @@ export class AstRefactorService {
   }
 
   private async getWorkspaceFiles(workspaceId: string) {
-    const workspace = await this.workspaceRepository.findById(workspaceId);
-    if (!workspace) throw new Error("Workspace not found");
-    const files = await this.filesystemService.getAllFiles(workspace.localPath);
+    const files = await this.contentService.listSourceFilePaths(workspaceId);
 
     return {
-      workspace,
       files: files.filter(
         (file) =>
           file.endsWith(".ts") ||
@@ -157,24 +145,18 @@ export class AstRefactorService {
     oldFile: string,
     newFile: string,
   ) {
-    const { workspace, files } = await this.getWorkspaceFiles(workspaceId);
-
+    const { files } = await this.getWorkspaceFiles(workspaceId);
     const buildImportPath = this.buildImportPath.bind(this);
 
-    const filesystemService = this.filesystemService;
-
-    for (const filePath of files) {
-      const relativeFile = filesystemService.getRelativePath(
-        workspace.localPath,
-        filePath,
-      );
-
-      // Skip the destination file itself
+    for (const relativeFile of files) {
       if (relativeFile === newFile) {
         continue;
       }
 
-      const code = await filesystemService.readFile(filePath);
+      const code = await this.contentService.readFile(
+        workspaceId,
+        relativeFile,
+      );
 
       const ast = parse(code, {
         sourceType: "module",
@@ -184,7 +166,6 @@ export class AstRefactorService {
       let changed = false;
 
       const oldImportPath = buildImportPath(relativeFile, oldFile);
-
       const newImportPath = buildImportPath(relativeFile, newFile);
 
       const traverseFn = (traverse as any).default || traverse;
@@ -207,8 +188,6 @@ export class AstRefactorService {
             return;
           }
 
-          // Only rewrite imports that actually
-          // come from the old file.
           if (path.node.source.value !== oldImportPath) {
             return;
           }
@@ -220,8 +199,9 @@ export class AstRefactorService {
       });
 
       if (changed) {
-        await filesystemService.writeFile(
-          filePath,
+        await this.contentService.writeFile(
+          workspaceId,
+          relativeFile,
           generate(ast, {
             retainLines: true,
           }).code,
@@ -263,11 +243,6 @@ export class AstRefactorService {
     sourceFile: string,
     targetFile: string,
   ) {
-    const workspace = await this.workspaceRepository.findById(workspaceId);
-    if (!workspace) {
-      throw new Error("Workspace not found");
-    }
-
     const result = await this.buildMoveFunctionResult(
       workspaceId,
       functionName,
@@ -275,11 +250,16 @@ export class AstRefactorService {
       targetFile,
     );
 
-    const sourcePath = path.join(workspace.localPath, sourceFile);
-    const targetPath = path.join(workspace.localPath, targetFile);
-
-    await this.filesystemService.writeFile(sourcePath, result.sourceAfter);
-    await this.filesystemService.writeFile(targetPath, result.targetAfter);
+    await this.contentService.writeFile(
+      workspaceId,
+      sourceFile,
+      result.sourceAfter,
+    );
+    await this.contentService.writeFile(
+      workspaceId,
+      targetFile,
+      result.targetAfter,
+    );
     await this.updateImportsForMovedFunction(
       workspaceId,
       functionName,
@@ -300,12 +280,12 @@ export class AstRefactorService {
     oldName: string,
     newName: string,
   ) {
-    const { workspace, files } = await this.getWorkspaceFiles(workspaceId);
+    const { files } = await this.getWorkspaceFiles(workspaceId);
 
     const affectedFiles = [];
 
     for (const filePath of files) {
-      const before = await this.filesystemService.readFile(filePath);
+      const before = await this.contentService.readFile(workspaceId, filePath);
 
       const ast = parse(before, {
         sourceType: "module",
@@ -364,10 +344,7 @@ export class AstRefactorService {
 
       if (before !== after) {
         affectedFiles.push({
-          filePath: this.filesystemService.getRelativePath(
-            workspace.localPath,
-            filePath,
-          ),
+          filePath,
           before,
           after,
         });
@@ -383,13 +360,13 @@ export class AstRefactorService {
       oldName,
       newName,
     );
-    const workspace = await this.workspaceRepository.findById(workspaceId);
-
-    if (!workspace) throw new Error("Workspace not found");
 
     for (const file of preview.affectedFiles) {
-      const absolutePath = path.join(workspace.localPath, file.filePath);
-      await this.filesystemService.writeFile(absolutePath, file.after);
+      await this.contentService.writeFile(
+        workspaceId,
+        file.filePath,
+        file.after,
+      );
     }
     return {
       renamed: oldName,

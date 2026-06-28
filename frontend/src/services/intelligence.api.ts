@@ -29,6 +29,14 @@ export interface RepositoryReport {
   };
 }
 
+export interface AIReview {
+  summary?: string;
+  strengths?: string[];
+  weaknesses?: string[];
+  recommendations?: string[];
+  raw?: string;
+}
+
 export const intelligenceApi = {
   async getHealth(workspaceId: string): Promise<HealthScore> {
     const res = await api.get(
@@ -51,5 +59,10 @@ export const intelligenceApi = {
       `/intelligence/report/${workspaceId}`,
     );
     return res.data.result;
+  },
+
+  async getReview(workspaceId: string): Promise<AIReview> {
+    const res = await api.get(`/intelligence/review/${workspaceId}`);
+    return res.data.result ?? {};
   },
 };

@@ -20,17 +20,22 @@ import { workspaceApi } from "@/services/workspace.api";
 import { Workspace } from "@/types/workspace.types";
 
 type AuthMode = "login" | "register";
+type WorkspaceSourceMode = "github" | "local";
 
 export default function DashboardPage() {
   const [workspaces, setWorkspaces] = useState<Workspace[]>([]);
   const [loading, setLoading] = useState(true);
   const [saving, setSaving] = useState(false);
   const [authMode, setAuthMode] = useState<AuthMode>("login");
+  const [sourceMode, setSourceMode] = useState<WorkspaceSourceMode>("github");
   const [name, setName] = useState("");
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
   const [workspaceName, setWorkspaceName] = useState("");
   const [workspacePath, setWorkspacePath] = useState("");
+  const [githubUrl, setGithubUrl] = useState("");
+  const [githubBranch, setGithubBranch] = useState("main");
+  const [githubToken, setGithubToken] = useState("");
   const [message, setMessage] = useState("");
   const [isAuthenticated, setIsAuthenticated] = useState(false);
 
@@ -122,24 +127,49 @@ export default function DashboardPage() {
 
   const handleCreateWorkspace = async (event: FormEvent) => {
     event.preventDefault();
-    if (!workspaceName || !workspacePath) {
-      setMessage("Workspace name and local path are required.");
+    if (!workspaceName) {
+      setMessage("Workspace name is required.");
+      return;
+    }
+
+    if (sourceMode === "github" && !githubUrl) {
+      setMessage("GitHub repository URL is required.");
+      return;
+    }
+
+    if (sourceMode === "local" && !workspacePath) {
+      setMessage("Local path is required for local workspaces.");
       return;
     }
 
     try {
       setSaving(true);
       setMessage("");
-      await workspaceApi.create({
-        name: workspaceName,
-        localPath: workspacePath,
-      });
+      await workspaceApi.create(
+        sourceMode === "github"
+          ? {
+              name: workspaceName,
+              sourceType: "github",
+              githubUrl,
+              githubBranch: githubBranch || "main",
+              githubToken: githubToken || undefined,
+            }
+          : {
+              name: workspaceName,
+              sourceType: "local",
+              localPath: workspacePath,
+            },
+      );
       setWorkspaceName("");
       setWorkspacePath("");
+      setGithubUrl("");
+      setGithubBranch("main");
+      setGithubToken("");
       await loadWorkspaces();
+      setMessage("Workspace created. Indexing started in the background.");
     } catch {
       setMessage(
-        "Could not create workspace. Make sure you are signed in.",
+        "Could not create workspace. Make sure you are signed in and the repo is accessible.",
       );
     } finally {
       setSaving(false);
@@ -280,8 +310,7 @@ export default function DashboardPage() {
                 Workspaces
               </h2>
               <p className="text-sm text-slate-500">
-                Open an indexed project or create a new workspace from a
-                local path.
+                Open an indexed project or connect a GitHub repository.
               </p>
             </div>
             {loading && (
@@ -335,7 +364,9 @@ export default function DashboardPage() {
                                 </span>
                               </div>
                               <p className="mt-1 truncate text-xs text-slate-500 font-mono">
-                                {workspace.localPath}
+                                {workspace.sourceType === "github"
+                                  ? `${workspace.githubOwner}/${workspace.githubRepo}`
+                                  : workspace.localPath}
                               </p>
                             </div>
                           </div>
@@ -381,7 +412,7 @@ export default function DashboardPage() {
                   No workspaces loaded
                 </p>
                 <p className="mt-1 text-sm text-slate-500">
-                  Sign in, then add a local project path.
+                  Sign in, then connect a GitHub repository.
                 </p>
               </div>
             )}
@@ -484,31 +515,75 @@ export default function DashboardPage() {
                 New Workspace
               </h3>
               <p className="mt-1 text-xs text-slate-500">
-                Index a local project codebase directory.
+                Index a GitHub repository for cloud deployment.
               </p>
             </div>
+
+            <div className="mb-3 grid grid-cols-2 rounded-xl bg-white/[0.02] border border-white/[0.06] p-1 text-[11px] font-bold uppercase tracking-wider">
+              {(["github", "local"] as WorkspaceSourceMode[]).map((mode) => (
+                <button
+                  key={mode}
+                  type="button"
+                  onClick={() => setSourceMode(mode)}
+                  className={`rounded-lg py-2 transition-all ${
+                    sourceMode === mode
+                      ? "bg-gradient-to-r from-cyan-400 to-cyan-500 text-slate-950"
+                      : "text-slate-400 hover:text-white"
+                  }`}
+                >
+                  {mode}
+                </button>
+              ))}
+            </div>
+
             <input
               value={workspaceName}
               onChange={(event) => setWorkspaceName(event.target.value)}
               placeholder="Workspace name (e.g. My API)"
               className="mb-2 h-10 w-full rounded-xl border border-white/[0.08] bg-white/[0.02] px-3 text-xs outline-none transition focus:border-cyan-400/40 focus:ring-1 focus:ring-cyan-400/20"
             />
-            <div className="relative mb-3 flex gap-2">
-              <input
-                value={workspacePath}
-                onChange={(event) => setWorkspacePath(event.target.value)}
-                placeholder="/absolute/path/to/local/project"
-                className="h-10 flex-1 rounded-xl border border-white/[0.08] bg-white/[0.02] px-3 text-xs outline-none transition focus:border-cyan-400/40 focus:ring-1 focus:ring-cyan-400/20"
-              />
-              <button
-                type="button"
-                onClick={handleBrowseFolder}
-                className="flex h-10 shrink-0 items-center gap-1.5 rounded-xl border border-white/[0.08] bg-white/[0.03] px-3 text-xs font-bold text-slate-300 transition hover:bg-white/[0.08] hover:text-white active:scale-95"
-              >
-                <FolderOpen className="h-4 w-4" />
-                Browse
-              </button>
-            </div>
+
+            {sourceMode === "github" ? (
+              <>
+                <input
+                  value={githubUrl}
+                  onChange={(event) => setGithubUrl(event.target.value)}
+                  placeholder="https://github.com/owner/repo"
+                  className="mb-2 h-10 w-full rounded-xl border border-white/[0.08] bg-white/[0.02] px-3 text-xs outline-none transition focus:border-cyan-400/40 focus:ring-1 focus:ring-cyan-400/20"
+                />
+                <input
+                  value={githubBranch}
+                  onChange={(event) => setGithubBranch(event.target.value)}
+                  placeholder="Branch (default: main)"
+                  className="mb-2 h-10 w-full rounded-xl border border-white/[0.08] bg-white/[0.02] px-3 text-xs outline-none transition focus:border-cyan-400/40 focus:ring-1 focus:ring-cyan-400/20"
+                />
+                <input
+                  value={githubToken}
+                  onChange={(event) => setGithubToken(event.target.value)}
+                  placeholder="GitHub token (optional for public repos)"
+                  type="password"
+                  className="mb-3 h-10 w-full rounded-xl border border-white/[0.08] bg-white/[0.02] px-3 text-xs outline-none transition focus:border-cyan-400/40 focus:ring-1 focus:ring-cyan-400/20"
+                />
+              </>
+            ) : (
+              <div className="relative mb-3 flex gap-2">
+                <input
+                  value={workspacePath}
+                  onChange={(event) => setWorkspacePath(event.target.value)}
+                  placeholder="/absolute/path/to/local/project"
+                  className="h-10 flex-1 rounded-xl border border-white/[0.08] bg-white/[0.02] px-3 text-xs outline-none transition focus:border-cyan-400/40 focus:ring-1 focus:ring-cyan-400/20"
+                />
+                <button
+                  type="button"
+                  onClick={handleBrowseFolder}
+                  className="flex h-10 shrink-0 items-center gap-1.5 rounded-xl border border-white/[0.08] bg-white/[0.03] px-3 text-xs font-bold text-slate-300 transition hover:bg-white/[0.08] hover:text-white active:scale-95"
+                >
+                  <FolderOpen className="h-4 w-4" />
+                  Browse
+                </button>
+              </div>
+            )}
+
             <button
               type="submit"
               disabled={saving}

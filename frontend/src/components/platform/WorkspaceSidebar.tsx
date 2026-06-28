@@ -1,6 +1,9 @@
 "use client";
 
 import {
+  Activity,
+  BookMarked,
+  Bot,
   BrainCircuit,
   FileCode2,
   Gauge,
@@ -22,6 +25,11 @@ const navItems = [
     icon: FileCode2,
   },
   {
+    label: "Assistant",
+    href: "/assistant",
+    icon: Bot,
+  },
+  {
     label: "Architecture",
     href: "/architecture",
     icon: GitBranch,
@@ -30,6 +38,11 @@ const navItems = [
     label: "Insights",
     href: "/insights",
     icon: Gauge,
+  },
+  {
+    label: "Decisions",
+    href: "/decisions",
+    icon: BookMarked,
   },
 ];
 

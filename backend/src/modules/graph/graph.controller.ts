@@ -42,7 +42,11 @@ export class GraphController {
     if (!workspaceId) {
       return res.status(400).json({ error: "workspaceId is required" });
     }
-    const result = await this.graphService.getVisualizationGraph(workspaceId);
+    const mode = req.query.mode === "full" ? "full" : "files";
+    const result = await this.graphService.getVisualizationGraph(
+      workspaceId,
+      mode,
+    );
     return res.status(200).json({ result });
   }
 

@@ -1,12 +1,17 @@
 import { IndexerService } from "../indexer/indexer.service.js";
 import { WorkspaceRepository } from "./workspace.repository.js";
-import { CreateWorkspaceDto, WorkspaceStatus } from "./workspace.types.js";
+import {
+  CreateWorkspaceDto,
+  WorkspaceSourceType,
+  WorkspaceStatus,
+} from "./workspace.types.js";
 import { ChunkRepository } from "../chunk/chunk.repository.js";
 import { GraphRepository } from "../graph/graph.repository.js";
 import { FileRepository } from "../file/file.repository.js";
 import { EmbeddingRepository } from "../embedding/embedding.repository.js";
 import { DecisionRepository } from "../decision/decision.repository.js";
 import { SnapshotRepository } from "../snapshot/snapshot.repository.js";
+import { parseGithubUrl } from "../../shared/github/github.service.js";
 
 export class WorkspaceService {
  
@@ -20,13 +25,51 @@ export class WorkspaceService {
      private readonly decisionRepository = new DecisionRepository(),
      private readonly snapshotRepository = new SnapshotRepository()
   ) {}
-  async createWorkspace(payload: CreateWorkspaceDto) {
-    const workspace = await this.workspaceRepository.create({
+
+  private normalizeCreatePayload(payload: CreateWorkspaceDto) {
+    const sourceType = payload.sourceType ?? WorkspaceSourceType.LOCAL;
+
+    if (sourceType === WorkspaceSourceType.GITHUB) {
+      const parsed =
+        payload.githubOwner && payload.githubRepo
+          ? { owner: payload.githubOwner, repo: payload.githubRepo }
+          : payload.githubUrl
+            ? parseGithubUrl(payload.githubUrl)
+            : null;
+
+      if (!parsed) {
+        throw new Error(
+          "GitHub workspace requires githubUrl or githubOwner/githubRepo",
+        );
+      }
+
+      return {
+        ...payload,
+        sourceType,
+        githubOwner: parsed.owner,
+        githubRepo: parsed.repo,
+        githubBranch: payload.githubBranch || "main",
+        localPath: `${parsed.owner}/${parsed.repo}`,
+      };
+    }
+
+    if (!payload.localPath) {
+      throw new Error("Local workspace requires localPath");
+    }
+
+    return {
       ...payload,
+      sourceType: WorkspaceSourceType.LOCAL,
+    };
+  }
+
+  async createWorkspace(payload: CreateWorkspaceDto) {
+    const normalized = this.normalizeCreatePayload(payload);
+    const workspace = await this.workspaceRepository.create({
+      ...normalized,
       status: WorkspaceStatus.PROCESSING,
     });
     
-    // Background indexing to prevent blocking
     this.indexerService.indexWorkspace(workspace._id.toString())
       .then(async () => {
         await this.workspaceRepository.updateStatus(workspace._id.toString(), 'READY');

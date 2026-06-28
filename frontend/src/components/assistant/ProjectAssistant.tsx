@@ -15,6 +15,7 @@ import { FormEvent, useMemo, useState } from "react";
 
 import WorkspaceSidebar from "@/components/platform/WorkspaceSidebar";
 import { assistantApi } from "@/services/assistant.api";
+import { explainerApi } from "@/services/explainer.api";
 import {
   AssistantAction,
   AssistantMessage,
@@ -74,6 +75,7 @@ export default function ProjectAssistant({
 }) {
   const [input, setInput] = useState("");
   const [loading, setLoading] = useState(false);
+  const [explaining, setExplaining] = useState(false);
   const [error, setError] = useState("");
   const [messages, setMessages] = useState<AssistantMessage[]>([
     {
@@ -143,6 +145,31 @@ export default function ProjectAssistant({
     ask(input);
   };
 
+  const explainProject = async () => {
+    try {
+      setExplaining(true);
+      setError("");
+      const explanation = await explainerApi.explainProject(workspaceId);
+      setMessages((current) => [
+        ...current,
+        {
+          id: messageId(),
+          role: "assistant",
+          content: explanation,
+          mode: "PROJECT_EXPLAINER",
+        },
+      ]);
+    } catch (err) {
+      setError(
+        err instanceof Error
+          ? err.message
+          : "Could not generate project explanation.",
+      );
+    } finally {
+      setExplaining(false);
+    }
+  };
+
   const renderMessageContent = (text: string) => {
     if (!text) return null;
     const parts = text.split(/(```[\s\S]*?```)/g);
@@ -182,8 +209,18 @@ export default function ProjectAssistant({
               Server-mediated RAG codebase context pipeline
             </p>
           </div>
-          <div className="rounded-full border border-cyan-400/25 bg-cyan-950/20 px-3 py-1 text-[10px] font-bold uppercase tracking-wider text-cyan-200">
-            Secure Context
+          <div className="flex items-center gap-2">
+            <div className="rounded-full border border-cyan-400/25 bg-cyan-950/20 px-3 py-1 text-[10px] font-bold uppercase tracking-wider text-cyan-200">
+              Secure Context
+            </div>
+            <button
+              type="button"
+              onClick={explainProject}
+              disabled={explaining || loading}
+              className="rounded-full border border-indigo-400/25 bg-indigo-950/20 px-3 py-1 text-[10px] font-bold uppercase tracking-wider text-indigo-200 disabled:opacity-50"
+            >
+              {explaining ? "Explaining…" : "Explain project"}
+            </button>
           </div>
         </header>
 
