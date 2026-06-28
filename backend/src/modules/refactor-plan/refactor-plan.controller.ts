@@ -19,8 +19,7 @@ export class RefactorPlanController {
   async generate(req: Request, res: Response) {
     const { workspaceId, goal } = req.body;
     const result = await this.refactorPlanService.generate(workspaceId, goal);
-        console.log("controller: ",result);
-
+        
     return res.json({
       success: true,
       result,

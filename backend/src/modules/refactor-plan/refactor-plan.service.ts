@@ -56,7 +56,7 @@ export class RefactorPlanService {
     const plan = parseAIJson(raw);
 
     const changeSet = this.changesetService.buildFromPlan(plan);
-    console.log("service: ",plan, changeSet);
+    
     
     return { plan, changeSet };
   }

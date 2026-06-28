@@ -44,7 +44,7 @@ export class WorkspaceController {
         error instanceof Error
           ? error.message
           : "Could not open the folder picker.";
-      console.log(message);
+
       return res.status(501).json({ success: false, message });
     }
   }

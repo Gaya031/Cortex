@@ -75,7 +75,7 @@ export class ChangeSetExecutorService {
       }
       console.log("Starting execution...");
       for (const rename of changeSet.renameFunctions ?? []) {
-        console.log(`Renaming ${rename.oldName} -> ${rename.newName}`);
+       
         const result = await this.astRefactorService.renameFunction(
           workspaceId,
           rename.oldName,
