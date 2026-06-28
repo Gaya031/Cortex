@@ -183,7 +183,7 @@ export class GithubService {
     ref: GithubRepoRef,
     filePath: string,
     content: string,
-    message = "Update via Cortex Code",
+    message = "Update via Cortex",
   ) {
     const branch = await this.resolveDefaultBranch(ref);
     const encodedPath = filePath

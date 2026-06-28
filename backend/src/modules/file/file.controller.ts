@@ -72,7 +72,7 @@ export class FileController {
         workspaceId,
         filePath,
         content,
-        `Update ${filePath} via Cortex Code`,
+        `Update ${filePath} via Cortex`,
       );
       await invalidateWorkspaceCache(workspaceId);
 

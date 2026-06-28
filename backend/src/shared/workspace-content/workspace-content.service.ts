@@ -68,7 +68,7 @@ export class WorkspaceContentService {
         this.githubRef(workspace),
         normalized,
         content,
-        commitMessage ?? `Update ${normalized} via Cortex Code`,
+        commitMessage ?? `Update ${normalized} via Cortex`,
       );
       return;
     }
