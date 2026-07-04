@@ -30,6 +30,7 @@ export default function RootLayout({
     <html lang="en" className={`${plusJakartaSans.variable} ${inter.variable}`}>
       <body className="antialiased font-sans">
         {children}
+        <Analytics/>
       </body>
     </html>
   );
